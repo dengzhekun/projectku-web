@@ -138,6 +138,8 @@ OpenAPI:
 - `docs/ai-customer-service-knowledge-base-design.md`
 - `docs/knowledge-base/2026-04-26-rag-solution-comparison.md`
 - `docs/knowledge-base/diagrams/`
+- `docs/deployment-faq.md`
+- `CONTRIBUTING.md`
 
 ## Public Release Notes
 
@@ -148,3 +150,4 @@ OpenAPI:
 
 - `deploy/ai-service.env`, `deploy/lightrag.env`, and `deploy/prod.env` are local/server secrets and are intentionally not committed.
 - The current release keeps Chroma as the stable retrieval path while allowing staged migration to LightRAG.
+- See `NOTICE` for trademark, demo asset, and redistribution caveats.
