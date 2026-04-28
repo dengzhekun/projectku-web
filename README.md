@@ -4,6 +4,9 @@ ProjectKu Web is a full-stack e-commerce project with product catalog, cart, ord
 
 ![ProjectKu homepage](docs/repo-assets/homepage.png)
 
+![Release](https://img.shields.io/github/v/release/dengzhekun/projectku-web)
+![License](https://img.shields.io/github/license/dengzhekun/projectku-web)
+
 ## Highlights
 
 - Storefront frontend built with Vue 3 and Vite
@@ -110,6 +113,11 @@ See:
 - `deploy/README.md`
 - `docs/deployment.md`
 
+## Repository Automation
+
+- GitHub Actions CI runs frontend install, production build, and frontend text-encoding regression checks.
+- Public issue intake is structured with bug-report and feature-request templates.
+
 Recommended production stack:
 
 - Nginx for frontend entry
@@ -153,6 +161,8 @@ OpenAPI:
 
 - `v0.1.0`: first public release, deployment templates and release packaging
 - `v0.1.1`: README visualization, public repository polish, and GitHub-facing deployment entry cleanup
+- `v0.1.2`: public repo documentation expansion and deployment FAQ cleanup
+- `v0.1.3`: homepage screenshot and frontend encoding regression guard
 
 ## Notes
 
