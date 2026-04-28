@@ -155,6 +155,42 @@ Deployment docs:
 - GitHub Actions CI runs frontend install/build, frontend text-encoding regression checks, backend unit tests, and a lightweight `ai-service` unit-test subset.
 - Public issue intake is structured with bug-report and feature-request templates.
 
+## Local Smoke Testing
+
+Playwright smoke tests live under `frontend/tests/` and target a running local stack.
+
+Install the browser once:
+
+```bash
+cd frontend
+npm run test:e2e:install
+```
+
+Run smoke tests after frontend and backend are already up:
+
+```bash
+cd frontend
+npm run test:e2e
+```
+
+Default assumptions:
+
+- frontend: `http://127.0.0.1:5173`
+- backend API: `http://127.0.0.1:8080/api`
+- seeded login: `user@example.com` / `123456`
+
+Override when needed:
+
+```bash
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 PLAYWRIGHT_API_BASE_URL=http://127.0.0.1:8080/api npm run test:e2e
+```
+
+Lightweight `k6` smoke scripts live under `k6/` and are only for local or staging checks.
+
+```bash
+k6 run k6/checkout-smoke.js
+```
+
 Recommended production stack:
 
 - Nginx for frontend entry
@@ -202,6 +238,7 @@ OpenAPI:
 - `v0.1.3`: homepage screenshot and frontend encoding regression guard
 - `v0.1.4`: GitHub CI and public issue templates
 - `v0.1.5`: quick-start clarification and lightweight AI-service CI
+- `v0.1.6`: Playwright smoke tests, k6 checkout smoke, and checkout coupon default fix
 
 ## Notes
 
