@@ -28,6 +28,16 @@ docs/          Design, deployment, API, and KB docs
 scripts/       Local helper and validation scripts
 ```
 
+## Architecture
+
+### Current system
+
+![ProjectKu system architecture](docs/knowledge-base/diagrams/01-current-system-architecture.png)
+
+### AI customer-service target flow
+
+![ProjectKu AI service target flow](docs/knowledge-base/diagrams/03-target-ai-service-flow.png)
+
 ## Local Development
 
 ### One-command startup
@@ -92,6 +102,16 @@ See:
 - `deploy/README.md`
 - `docs/deployment.md`
 
+Recommended production stack:
+
+- Nginx for frontend entry
+- Spring Boot backend with `prod` profile
+- FastAPI AI service
+- MySQL 8
+- Neo4j 5
+- PostgreSQL with pgvector
+- LightRAG in staged rollout mode
+
 ## Main Views
 
 - Home: `frontend/src/views/HomeView.vue`
@@ -117,6 +137,12 @@ OpenAPI:
 - `docs/ai-service-runbook.md`
 - `docs/ai-customer-service-knowledge-base-design.md`
 - `docs/knowledge-base/2026-04-26-rag-solution-comparison.md`
+- `docs/knowledge-base/diagrams/`
+
+## Public Release Notes
+
+- `v0.1.0`: first public release, deployment templates and release packaging
+- `v0.1.1`: README visualization, public repository polish, and GitHub-facing deployment entry cleanup
 
 ## Notes
 
