@@ -101,10 +101,12 @@ start_dev() {
 
 start_prod() {
   have docker || { echo "docker not found; install/start Docker or use dev mode" >&2; exit 1; }
+  local env_args=()
+  [[ -f "$ROOT/deploy/prod.env" ]] && env_args=(--env-file deploy/prod.env)
   if [[ "$DRYRUN" == "1" ]]; then
-    echo '[dry-run] docker compose -f docker-compose.prod.yml up -d --build'
+    printf '[dry-run] docker compose %s -f docker-compose.prod.yml up -d --build\n' "${env_args[*]}"
   else
-    (cd "$ROOT" && docker compose -f docker-compose.prod.yml up -d --build)
+    (cd "$ROOT" && docker compose "${env_args[@]}" -f docker-compose.prod.yml up -d --build)
   fi
 }
 

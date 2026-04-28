@@ -120,12 +120,16 @@ function Start-Dev {
 
 function Start-Prod {
   if (-not (Test-Command "docker")) { throw "docker not found; install/start Docker Desktop or use dev mode" }
+  $envArgs = @()
+  if (Test-Path (Join-Path $Root "deploy\prod.env")) {
+    $envArgs += @("--env-file", "deploy/prod.env")
+  }
   if ($DryRun) {
-    Write-Host "[dry-run] docker compose -f docker-compose.prod.yml up -d --build"
+    Write-Host ("[dry-run] docker compose " + ($envArgs -join " ") + " -f docker-compose.prod.yml up -d --build")
     return
   }
   Push-Location $Root
-  docker compose -f docker-compose.prod.yml up -d --build
+  docker compose @envArgs -f docker-compose.prod.yml up -d --build
   Pop-Location
   Write-Host "Production entry: http://localhost/"
 }

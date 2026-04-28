@@ -1,166 +1,167 @@
 # ProjectKu Production Deployment
 
-## Architecture
+## Recommended Entry
 
-- Frontend: Vue build output served by Nginx.
-- Backend: Spring Boot 3 with the `prod` profile.
-- AI service: FastAPI, Xunfei Coding Plan LLM, local BGE-M3 embeddings, Chroma vector store.
-- Graph database: Neo4j 5 community for product, category, and policy relationships.
-- Database: MySQL 8 with persistent volume.
-- Entry point: Nginx listens on port `80` and proxies `/api/` to the backend.
+For the public repository, the recommended deployment path is the script and template set under `deploy/`.
 
-## Docker Compose Deployment
+Minimal flow:
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
+cp deploy/prod.env.example deploy/prod.env
+cp deploy/ai-service.env.example deploy/ai-service.env
+./deploy/prepare_lightrag_env.sh
+vi deploy/prod.env
+vi deploy/ai-service.env
+vi deploy/lightrag.env
+./deploy/bootstrap-prod.sh
 ```
 
-After deployment:
+If you only need the quick operator view, start with `deploy/README.md`.
 
-- Frontend: `http://SERVER_IP/`
-- Knowledge base admin: `http://SERVER_IP/admin/kb`
-- Backend API: `http://SERVER_IP/api/v1/products`
-- AI health check: `http://SERVER_IP:9000/health` if exposed internally or by firewall rule.
-- Neo4j browser: `http://SERVER_IP:7474` if exposed internally or by firewall rule.
+## Runtime Architecture
 
-## Required Environment
+- Frontend: Vue build served by Nginx
+- Backend: Spring Boot 3 with `prod` profile
+- AI service: FastAPI for AI chat, product lookup, and KB retrieval
+- MySQL 8: business database
+- Neo4j 5: graph storage
+- PostgreSQL + pgvector: LightRAG vector and document-status storage
+- LightRAG: graph-enhanced retrieval service
 
-Set strong passwords before production deployment:
+Ports:
 
-```bash
+- `80`: frontend entry
+- `7474`: Neo4j Browser
+- `7687`: Neo4j Bolt
+- `19621` on loopback: LightRAG server
+
+## Environment Files
+
+### `deploy/prod.env`
+
+Used for top-level variable interpolation in `docker-compose.prod.yml`:
+
+```env
 MYSQL_ROOT_PASSWORD=change_me
+MYSQL_DATABASE=web
 NEO4J_PASSWORD=change_me
 ```
 
-The AI service reads `deploy/ai-service.env`. Confirm these values before deployment:
+### `deploy/ai-service.env`
 
-- `AI_LLM_BASE_URL=https://maas-coding-api.cn-huabei-1.xf-yun.com/v2`
-- `AI_LLM_MODEL=astron-code-latest`
-- `AI_LLM_API_KEY=...`
-- `AI_EMBEDDING_MODEL=BAAI/bge-m3`
-- `AI_EMBEDDING_GATEWAY_API_KEY=...` (used by `POST /v1/embeddings` OpenAI-compatible gateway)
-- `AI_EMBEDDING_HF_ENDPOINT=https://hf-mirror.com`
-- `CHROMA_ANONYMIZED_TELEMETRY=false`
-- `KNOWLEDGE_RETRIEVER=chroma` (default/safe)
-- `LIGHTRAG_BASE_URL=http://127.0.0.1:9621` for local process, or `http://lightrag:9621` on Docker Compose internal network
-- `LIGHTRAG_API_KEY=` (empty if not required, otherwise use your server token)
-- `LIGHTRAG_TIMEOUT_SECONDS=60`
-- `LIGHTRAG_QUERY_MODE=hybrid`
+Main AI-service config. Copy from `deploy/ai-service.env.example`.
 
-LightRAG container reads `deploy/lightrag.env` (not committed):
+Check these values carefully:
 
-1. Create it with:
-   ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup_lightrag_env.ps1
-   ```
-   Use `-Force` only when you need to overwrite an existing `deploy/lightrag.env`.
-2. Keep:
-   - `EMBEDDING_BINDING=openai`
-   - `EMBEDDING_BINDING_HOST=http://ai-service:9000/v1`
-   - `EMBEDDING_MODEL=BAAI/bge-m3`
-   - `EMBEDDING_DIM=1024`
-   - `EMBEDDING_SEND_DIM=false`
-   - `EMBEDDING_USE_BASE64=false`
-3. Set `EMBEDDING_BINDING_API_KEY` to the same value as `AI_EMBEDDING_GATEWAY_API_KEY`.
+- `AI_LLM_BASE_URL`
+- `AI_LLM_API_KEY`
+- `AI_LLM_MODEL`
+- `AI_EMBEDDING_PROVIDER`
+- `AI_EMBEDDING_MODEL`
+- `AI_EMBEDDING_REMOTE_URL`
+- `AI_EMBEDDING_REMOTE_API_KEY`
+- `AI_EMBEDDING_GATEWAY_API_KEY`
+- `KNOWLEDGE_RETRIEVER`
+- `LIGHTRAG_BASE_URL`
+- `LIGHTRAG_API_KEY`
+- `NEO4J_PASSWORD`
 
-Retriever mode meanings:
+### `deploy/lightrag.env`
 
-- `chroma`: current stable behavior
-- `lightrag`: requires healthy LightRAG Server; no fallback
-- `lightrag_with_chroma_fallback`: recommended trial mode
+Generate it first with:
 
-Rollback:
+```bash
+./deploy/prepare_lightrag_env.sh
+```
+
+That script syncs these values from `ai-service.env`:
+
+- `AI_LLM_BASE_URL -> LLM_BINDING_HOST`
+- `AI_LLM_API_KEY -> LLM_BINDING_API_KEY`
+- `AI_LLM_MODEL -> LLM_MODEL`
+- `AI_EMBEDDING_GATEWAY_API_KEY -> EMBEDDING_BINDING_API_KEY`
+- `AI_EMBEDDING_MODEL -> EMBEDDING_MODEL`
+- `NEO4J_PASSWORD -> NEO4J_PASSWORD`
+
+You still need to set:
+
+- `LIGHTRAG_API_KEY`
+- `POSTGRES_PASSWORD`
+
+## Startup
+
+```bash
+./deploy/bootstrap-prod.sh
+```
+
+Equivalent compose command:
+
+```bash
+docker compose --env-file deploy/prod.env -f docker-compose.prod.yml up -d --build
+```
+
+## Endpoints
+
+- Front page: `http://SERVER_IP/`
+- KB admin: `http://SERVER_IP/admin/kb`
+- Product API: `http://SERVER_IP/api/v1/products`
+
+If you explicitly expose more ports:
+
+- AI health: `http://SERVER_IP:9000/health`
+- Neo4j Browser: `http://SERVER_IP:7474`
+
+## Operations
+
+Status:
+
+```bash
+docker compose --env-file deploy/prod.env -f docker-compose.prod.yml ps
+```
+
+Logs:
+
+```bash
+docker compose --env-file deploy/prod.env -f docker-compose.prod.yml logs -f
+```
+
+Stop:
+
+```bash
+docker compose --env-file deploy/prod.env -f docker-compose.prod.yml down
+```
+
+## Retriever Mode Guidance
+
+Interpret `KNOWLEDGE_RETRIEVER` in `deploy/ai-service.env` like this:
+
+- `chroma`: safest current path
+- `lightrag`: pure LightRAG, all dependencies must be healthy
+- `lightrag_with_chroma_fallback`: safer trial mode for staged rollout
+
+Fast rollback:
 
 1. Set `KNOWLEDGE_RETRIEVER=chroma`
 2. Restart `ai-service`
 
-## Manual Deployment
+## Memory Guidance
 
-Frontend:
+This project can use a remote LLM, so server memory is mainly consumed by Java, MySQL, Neo4j, LightRAG, and embeddings.
 
-```bash
-cd frontend
-npm ci
-npm run build
-```
+- Minimum workable: `8 GB`
+- Better baseline: `12 GB`
+- Safer target: `16 GB`
 
-Backend:
+Typical ranges:
 
-```bash
-cd back
-mvn -DskipTests package
-java -jar target/*.jar --spring.profiles.active=prod
-```
+- MySQL: `0.6-1.2 GB`
+- Spring Boot: `0.4-0.9 GB`
+- AI service: `0.3-0.8 GB`
+- Neo4j: `1.5-3 GB`
+- Local BGE-M3 embeddings: `2-6 GB`
 
-AI service:
+For low-memory servers, prefer:
 
-```bash
-cd ai-service
-python -m pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
-python app/ingest/sync_job.py
-python -m uvicorn app.main:app --host 0.0.0.0 --port 9000
-```
-
-Knowledge base admin usage after services are up:
-
-1. Open `/admin/kb`
-2. Upload or create a document
-3. Run chunk preview
-4. Run indexing
-5. Ask a customer-service question
-6. Check hit logs in the same admin page
-
-MySQL:
-
-```bash
-mysql -uroot -p -e "CREATE DATABASE IF NOT EXISTS web DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -uroot -p --default-character-set=utf8mb4 web < back/sql/init_db.sql
-```
-
-Neo4j:
-
-```bash
-docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/YOUR_PASSWORD neo4j:5-community
-```
-
-## Memory Estimate
-
-This project does not run the Qwen 35B model locally. The LLM is remote through Xunfei Coding Plan, so server memory mainly comes from Java, MySQL, Neo4j, Chroma, and local embedding.
-
-- Minimum single-server memory: 8 GB.
-- Recommended single-server memory: 12-16 GB.
-- Recommended if you expect frequent re-indexing, larger doc batches, or concurrent traffic: 16 GB.
-- MySQL: about 0.6-1.2 GB for this project size.
-- Spring backend: about 0.4-0.9 GB.
-- Nginx frontend: about 0.05-0.1 GB.
-- AI FastAPI service: about 0.3-0.8 GB before embedding warm-up.
-- BGE-M3 local embedding on CPU: about 2-6 GB during warm-up/indexing depending cache and batch size.
-- Neo4j: about 1.5-3 GB for a small graph with safe headroom.
-
-Practical sizing:
-
-- `8 GB`: can run, but indexing and Neo4j warm-up headroom is tight
-- `12 GB`: usable baseline for one machine
-- `16 GB`: safer target if you want local embedding plus Neo4j on the same host
-
-For low-memory servers, keep Xunfei remote LLM unchanged and consider one of these first:
-
-- move Neo4j to another host
-- switch embedding to a smaller local BGE variant
-- switch embedding to a cloud embedding API
-
-## Local Development
-
-Windows one-command startup:
-
-```powershell
-.\start_all.ps1 -Mode dev -InstallAiDeps -SeedAiKb
-```
-
-Linux/macOS one-command startup:
-
-```bash
-./start_all.sh dev --install-ai-deps --seed-ai-kb
-```
-
-After the first run, skip the dependency and seed flags unless requirements or knowledge files changed.
+- remote embeddings
+- moving Neo4j off the main app host
+- keeping `chroma` as the primary retrieval path first
