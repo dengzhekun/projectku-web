@@ -16,6 +16,9 @@ back/*.log
 # Node/Frontend (if applicable)
 frontend/node_modules/
 frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
+frontend/tests/.auth/
 frontend/.env.local
 frontend/.env.development.local
 frontend/.env.test.local
