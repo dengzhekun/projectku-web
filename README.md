@@ -1,5 +1,9 @@
 # ProjectKu Web
 
+## Handoff
+
+If someone else is taking over or helping maintain this project, start with [HANDOFF.md](HANDOFF.md).
+
 ProjectKu Web is a full-stack e-commerce project with product catalog, cart, orders, coupons, after-sales flows, reviews, wallet balance, and an AI customer-service knowledge base.
 
 ![ProjectKu homepage](docs/repo-assets/homepage.png)
