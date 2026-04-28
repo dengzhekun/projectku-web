@@ -75,3 +75,8 @@ Stop:
 ```bash
 docker compose --env-file deploy/prod.env -f docker-compose.prod.yml down
 ```
+
+More operator notes:
+
+- `docs/deployment.md`
+- `docs/deployment-faq.md`
