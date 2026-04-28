@@ -95,15 +95,14 @@ const isCouponAvailable = (coupon: Coupon) => itemsAmount.value >= coupon.minSpe
 
 const couponGap = (coupon: Coupon) => Math.max(0, coupon.minSpend - itemsAmount.value)
 
-const firstAvailableCoupon = computed(() => coupons.find((x) => isCouponAvailable(x)) ?? null)
-
 const selectedCoupon = computed(() => coupons.find((x) => x.id === selectedCouponId.value) ?? null)
 
 watch(
   itemsAmount,
   () => {
-    if (selectedCoupon.value && isCouponAvailable(selectedCoupon.value)) return
-    selectedCouponId.value = firstAvailableCoupon.value?.id ?? ''
+    if (selectedCoupon.value && !isCouponAvailable(selectedCoupon.value)) {
+      selectedCouponId.value = ''
+    }
   },
   { immediate: true },
 )
@@ -344,6 +343,20 @@ const submit = async () => {
             <div class="panelTitle">优惠券</div>
           </div>
           <div class="couponList">
+            <label class="coupon" :class="{ on: selectedCouponId === '' }">
+              <input
+                v-model="selectedCouponId"
+                class="radio"
+                type="radio"
+                name="coupon"
+                value=""
+              />
+              <div class="couponBody">
+                <div class="couponTitle">不使用优惠券</div>
+                <div class="couponCode">按商品原价结算</div>
+              </div>
+              <div class="couponVal">¥0</div>
+            </label>
             <label
               v-for="c in coupons"
               :key="c.id"
