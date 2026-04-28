@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "back/**"
+      - "scripts/verify_frontend_text_encoding.js"
+      - ".github/workflows/**"
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - "back/**"
+      - "scripts/verify_frontend_text_encoding.js"
+      - ".github/workflows/**"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend Build And Encoding
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build Frontend
+        run: npm run build
+        working-directory: frontend
+
+      - name: Verify Frontend Text Encoding
+        run: node scripts/verify_frontend_text_encoding.js
+
+  backend:
+    name: Backend Unit Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Run Backend Tests
+        run: mvn -q test
+        working-directory: back
