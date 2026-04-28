@@ -43,9 +43,54 @@ scripts/       Local helper and validation scripts
 
 ![ProjectKu AI service target flow](docs/knowledge-base/diagrams/03-target-ai-service-flow.png)
 
-## Local Development
+## Quick Start
 
-### One-command startup
+### 1) Minimal local run (storefront + backend)
+
+Use this path if you want the shortest working local setup without bringing up the AI service.
+
+Prerequisites:
+
+- Java 17 + Maven (`mvn`)
+- Node.js 20 + npm (`npm`)
+- MySQL 8
+
+Default backend local database settings are `localhost:3306`, database `web`, username `root`, password `123456`.
+
+Import the schema and seed data:
+
+```bash
+mysql -uroot -p123456 -e "CREATE DATABASE IF NOT EXISTS web DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -uroot -p123456 --default-character-set=utf8mb4 web < back/sql/init_db.sql
+```
+
+Start backend:
+
+```bash
+cd back
+mvn spring-boot:run
+```
+
+Start frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev -- --host 127.0.0.1
+```
+
+### 2) AI-enabled local run
+
+Use this path if you want the full local stack, including the AI service and seeded knowledge-base content.
+
+Prerequisites:
+
+- Java 17 + Maven (`mvn`)
+- Node.js 20 + npm (`npm`)
+- Python 3.11+ (`python`)
+- Docker (recommended, for local MySQL auto-start)
+
+Fastest path:
 
 Windows PowerShell:
 
@@ -59,47 +104,28 @@ Linux / macOS:
 ./start_all.sh dev --install-ai-deps --seed-ai-kb
 ```
 
-Default local URLs:
+To make AI chat actually answer through your remote LLM, copy `deploy/ai-service.env.example` to `deploy/ai-service.env` and fill at least:
 
-- Frontend: `http://127.0.0.1:5173`
+- `AI_LLM_API_KEY`
+- `AI_LLM_BASE_URL` / `AI_LLM_MODEL` if you are not using the default provider
+
+By default the AI service uses local `BAAI/bge-m3` embeddings, so the first startup may download model files. If you already have a remote embedding service, set `AI_EMBEDDING_PROVIDER=remote_http` and fill the remote embedding variables instead.
+
+Default local URLs after startup:
+
+- Frontend: `http://127.0.0.1:5173/`
 - Backend: `http://localhost:8080/api`
-- AI service: `http://127.0.0.1:9000/health`
+- AI health: `http://127.0.0.1:9000/health`
 
-Frontend text-encoding regression check:
+Optional frontend text-encoding regression check:
 
 ```bash
 node scripts/verify_frontend_text_encoding.js
 ```
 
-### Manual startup
+### 3) Production deployment
 
-1. Start MySQL and import `back/sql/init_db.sql`
-2. Start backend:
-
-```bash
-cd back
-mvn spring-boot:run
-```
-
-3. Start AI service:
-
-```bash
-cd ai-service
-python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --host 127.0.0.1 --port 9000 --reload
-```
-
-4. Start frontend:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-## Production Deployment
-
-The repo now includes a reusable GitHub-friendly deployment entrypoint:
+Fastest production path (Linux server):
 
 ```bash
 cp deploy/prod.env.example deploy/prod.env
@@ -108,14 +134,25 @@ cp deploy/ai-service.env.example deploy/ai-service.env
 ./deploy/bootstrap-prod.sh
 ```
 
-See:
+Alternative from repo root (same production compose stack):
+
+```bash
+./start_all.sh prod
+```
+
+```powershell
+.\start_all.ps1 -Mode prod
+```
+
+Deployment docs:
 
 - `deploy/README.md`
 - `docs/deployment.md`
+- `docs/deployment-faq.md`
 
 ## Repository Automation
 
-- GitHub Actions CI runs frontend install, production build, and frontend text-encoding regression checks.
+- GitHub Actions CI runs frontend install/build, frontend text-encoding regression checks, backend unit tests, and a lightweight `ai-service` unit-test subset.
 - Public issue intake is structured with bug-report and feature-request templates.
 
 Recommended production stack:
@@ -163,6 +200,8 @@ OpenAPI:
 - `v0.1.1`: README visualization, public repository polish, and GitHub-facing deployment entry cleanup
 - `v0.1.2`: public repo documentation expansion and deployment FAQ cleanup
 - `v0.1.3`: homepage screenshot and frontend encoding regression guard
+- `v0.1.4`: GitHub CI and public issue templates
+- `v0.1.5`: quick-start clarification and lightweight AI-service CI
 
 ## Notes
 
