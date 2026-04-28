@@ -2,6 +2,8 @@
 
 ProjectKu Web is a full-stack e-commerce project with product catalog, cart, orders, coupons, after-sales flows, reviews, wallet balance, and an AI customer-service knowledge base.
 
+![ProjectKu homepage](docs/repo-assets/homepage.png)
+
 ## Highlights
 
 - Storefront frontend built with Vue 3 and Vite
@@ -59,6 +61,12 @@ Default local URLs:
 - Frontend: `http://127.0.0.1:5173`
 - Backend: `http://localhost:8080/api`
 - AI service: `http://127.0.0.1:9000/health`
+
+Frontend text-encoding regression check:
+
+```bash
+node scripts/verify_frontend_text_encoding.js
+```
 
 ### Manual startup
 
@@ -151,3 +159,4 @@ OpenAPI:
 - `deploy/ai-service.env`, `deploy/lightrag.env`, and `deploy/prod.env` are local/server secrets and are intentionally not committed.
 - The current release keeps Chroma as the stable retrieval path while allowing staged migration to LightRAG.
 - See `NOTICE` for trademark, demo asset, and redistribution caveats.
+- `docs/repo-assets/homepage.png` is generated from the local running frontend and can be refreshed after UI updates.
