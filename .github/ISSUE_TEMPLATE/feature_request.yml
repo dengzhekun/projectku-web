@@ -1,0 +1,55 @@
+name: Feature request
+description: Propose an improvement for ProjectKu Web.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the user problem first, then the proposed change.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What user or business problem are you trying to solve?
+      placeholder: As a shopper/admin/developer, I need ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: Describe the change you want to see.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and Impact
+      description: Which modules are affected and any risks/tradeoffs.
+      placeholder: frontend/back/ai-service/deploy/docs, compatibility notes, migration needs
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Optional. What other approaches did you consider?
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - nice to have
+        - medium
+        - high
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked open issues and did not find a duplicate.
+          required: true
+        - label: This request is scoped to a concrete, actionable change.
+          required: true
