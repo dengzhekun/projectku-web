@@ -1,0 +1,56 @@
+name: evanshine-shop
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: evanshine-shop-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "123456"
+      MYSQL_DATABASE: "web"
+      TZ: "Asia/Shanghai"
+    command:
+      - mysqld
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - evanshine-shop-mysql-data:/var/lib/mysql
+      - ./back/sql/init_db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p123456"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/backend-runtime.Dockerfile
+    container_name: evanshine-shop-backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/web?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: "123456"
+      AI_SERVICE_BASE_URL: http://host.docker.internal:19000
+      AI_SERVICE_TIMEOUT_SECONDS: "120"
+      AI_EMBEDDING_PROVIDER: remote_http
+      CHROMA_COLLECTION: ecommerce_kb_v1_bge_m3_remote
+      KB_STORAGE_ROOT: /app/storage/kb
+    extra_hosts:
+      - "host.docker.internal:172.21.0.1"
+    ports:
+      - "127.0.0.1:18080:8080"
+    volumes:
+      - evanshine-shop-kb-storage:/app/storage/kb
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  evanshine-shop-mysql-data:
+    name: evanshine-shop-mysql-data
+  evanshine-shop-kb-storage:
+    name: evanshine-shop-kb-storage

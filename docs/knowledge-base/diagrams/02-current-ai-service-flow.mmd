@@ -1,0 +1,37 @@
+flowchart TD
+    classDef start fill:#eef2ff,stroke:#6366f1,color:#1e1b4b,stroke-width:2px;
+    classDef action fill:#f8fafc,stroke:#334155,color:#0f172a,stroke-width:1.5px;
+    classDef tool fill:#eff6ff,stroke:#2563eb,color:#0f172a,stroke-width:1.5px;
+    classDef good fill:#f0fdf4,stroke:#16a34a,color:#14532d,stroke-width:1.5px;
+    classDef warn fill:#fff7ed,stroke:#f97316,color:#7c2d12,stroke-width:1.5px;
+    classDef bad fill:#fef2f2,stroke:#dc2626,color:#7f1d1d,stroke-width:1.5px;
+
+    A[用户提问<br/>例如：苹果15多少钱]:::start
+    B[进入 AI Service]:::action
+    C[基于 prompt 粗判断问题类型]:::action
+    D{是否明显像商品问题}:::tool
+    E[尝试按商品关键词查后端商品接口]:::tool
+    F{是否查到足够明确的商品}:::tool
+    G[基于实时商品数据回答]:::good
+    H[回退到知识库检索]:::tool
+    I[把检索结果交给大模型生成回答]:::action
+    J[输出回答]:::good
+
+    P1[问题 1<br/>别名 / 型号归一化弱]:::bad
+    P2[问题 2<br/>没有明确的置信度分级]:::bad
+    P3[问题 3<br/>多 SKU / 容量歧义时追问不足]:::bad
+    P4[问题 4<br/>外部实时信息没有独立联网链路]:::bad
+
+    A --> B --> C --> D
+    D -- 是 --> E --> F
+    F -- 是 --> G --> J
+    F -- 否 --> H
+    D -- 否 --> H --> I --> J
+
+    C -.暴露.-> P2
+    E -.暴露.-> P1
+    F -.暴露.-> P3
+    H -.暴露.-> P4
+
+    N[当前结论<br/>能回答一部分商品问题，但在别名识别、规格澄清、实时外部信息方面还不稳定]:::warn
+    J --> N

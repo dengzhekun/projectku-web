@@ -1,0 +1,46 @@
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: web
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://mysql:3306/web?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:123456}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: 30000
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.web.pojo
+  configuration:
+    map-underscore-to-camel-case: true
+
+logging:
+  level:
+    root: INFO
+    com.web: INFO
+    org.mybatis: WARN
+
+ai:
+  service:
+    base-url: ${AI_SERVICE_BASE_URL:http://127.0.0.1:9000}
+    timeout-seconds: ${AI_SERVICE_TIMEOUT_SECONDS:120}
+    embedding-provider: ${AI_EMBEDDING_PROVIDER:local_bge_m3}
+    vector-collection: ${CHROMA_COLLECTION:ecommerce_kb_v1}
+
+kb:
+  storage:
+    root-path: ${KB_STORAGE_ROOT:./storage/kb}
+
+order:
+  cleanup:
+    timeout-minutes: ${ORDER_TIMEOUT_MINUTES:30}
+    batch-size: ${ORDER_CLEANUP_BATCH_SIZE:100}
+    fixed-delay-ms: ${ORDER_CLEANUP_FIXED_DELAY_MS:60000}

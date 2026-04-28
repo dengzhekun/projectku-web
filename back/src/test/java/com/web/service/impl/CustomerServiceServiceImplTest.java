@@ -1,0 +1,161 @@
+package com.web.service.impl;
+
+import com.web.dto.CustomerServiceChatRequest;
+import com.web.dto.CustomerServiceChatResponse;
+import com.web.dto.CustomerServiceHitLog;
+import com.web.exception.BusinessException;
+import com.web.service.AiCustomerServiceClient;
+import com.web.service.KnowledgeBaseService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
+import java.io.ByteArrayOutputStream;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class CustomerServiceServiceImplTest {
+
+    @Mock
+    private AiCustomerServiceClient aiCustomerServiceClient;
+
+    @Mock
+    private KnowledgeBaseService knowledgeBaseService;
+
+    private CustomerServiceServiceImpl customerServiceService;
+
+    @BeforeEach
+    void setUp() {
+        customerServiceService = new CustomerServiceServiceImpl(aiCustomerServiceClient, knowledgeBaseService);
+    }
+
+    @Test
+    void chatRejectsBlankMessage() {
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> customerServiceService.chat("   ", null));
+
+        assertEquals("VALIDATION_FAILED", exception.getCode());
+        verifyNoInteractions(aiCustomerServiceClient);
+        verifyNoInteractions(knowledgeBaseService);
+    }
+
+    @Test
+    void chatReturnsStructuredReplyFromAiGateway() {
+        CustomerServiceChatResponse gatewayReply = new CustomerServiceChatResponse();
+        gatewayReply.setAnswer("Please check the order detail page first.");
+        gatewayReply.setConfidence(new BigDecimal("0.92"));
+        gatewayReply.setRoute("order");
+        gatewayReply.setSourceType("business");
+
+        when(aiCustomerServiceClient.chat(any(CustomerServiceChatRequest.class))).thenReturn(gatewayReply);
+
+        CustomerServiceChatResponse response = customerServiceService.chat("Request refund", "conversation-1", "Bearer token-123");
+
+        assertEquals("Please check the order detail page first.", response.getAnswer());
+        ArgumentCaptor<CustomerServiceChatRequest> requestCaptor =
+                ArgumentCaptor.forClass(CustomerServiceChatRequest.class);
+        verify(aiCustomerServiceClient).chat(requestCaptor.capture());
+        assertEquals("Request refund", requestCaptor.getValue().getMessage());
+        assertEquals("conversation-1", requestCaptor.getValue().getConversationId());
+        assertEquals("Bearer token-123", requestCaptor.getValue().getAuthToken());
+        verify(knowledgeBaseService).recordCustomerServiceLog(
+                "Request refund",
+                "conversation-1",
+                "order",
+                "business",
+                null,
+                new BigDecimal("0.92"),
+                null);
+    }
+
+    @Test
+    void chatPersistsHitLogsReturnedByAiGateway() {
+        CustomerServiceChatResponse gatewayReply = new CustomerServiceChatResponse();
+        gatewayReply.setAnswer("Seven-day return is supported.");
+        gatewayReply.setConfidence(new BigDecimal("0.95"));
+
+        CustomerServiceHitLog hitLog = new CustomerServiceHitLog();
+        hitLog.setDocumentId(8L);
+        hitLog.setChunkId(81L);
+        gatewayReply.setHitLogs(List.of(hitLog));
+
+        when(aiCustomerServiceClient.chat(any(CustomerServiceChatRequest.class))).thenReturn(gatewayReply);
+
+        customerServiceService.chat("Seven-day return rule", "conversation-2");
+
+        verify(knowledgeBaseService).recordHitLogs(
+                "Seven-day return rule",
+                "conversation-2",
+                gatewayReply.getHitLogs());
+    }
+
+    @Test
+    void chatRecordsMissedQuestionWhenAiGatewayFallsBackWithoutHitLogs() {
+        CustomerServiceChatResponse gatewayReply = new CustomerServiceChatResponse();
+        gatewayReply.setAnswer("I cannot confirm this from the current knowledge base.");
+        gatewayReply.setConfidence(new BigDecimal("0.56"));
+        gatewayReply.setFallbackReason("No matching knowledge was found. The answer uses generic rules only.");
+
+        when(aiCustomerServiceClient.chat(any(CustomerServiceChatRequest.class))).thenReturn(gatewayReply);
+
+        customerServiceService.chat("Can coupons be stacked with balance payment?", "conversation-miss");
+
+        verify(knowledgeBaseService).recordMissedQuestion(
+                "Can coupons be stacked with balance payment?",
+                "conversation-miss",
+                new BigDecimal("0.56"),
+                "No matching knowledge was found. The answer uses generic rules only.");
+    }
+
+    @Test
+    void chatStillReturnsReplyWhenMissLogPersistenceFails() {
+        CustomerServiceChatResponse gatewayReply = new CustomerServiceChatResponse();
+        gatewayReply.setAnswer("Please provide a more specific product name.");
+        gatewayReply.setConfidence(new BigDecimal("0.62"));
+        gatewayReply.setRoute("product");
+        gatewayReply.setSourceType("product");
+        gatewayReply.setFallbackReason("No realtime product match for plain apple price query.");
+
+        when(aiCustomerServiceClient.chat(any(CustomerServiceChatRequest.class))).thenReturn(gatewayReply);
+        doThrow(new RuntimeException("kb_miss_log missing"))
+                .when(knowledgeBaseService)
+                .recordMissedQuestion(
+                        "Apple price?",
+                        "conversation-miss-failed",
+                        new BigDecimal("0.62"),
+                        "No realtime product match for plain apple price query.");
+
+        CustomerServiceChatResponse response =
+                customerServiceService.chat("Apple price?", "conversation-miss-failed");
+
+        assertEquals("Please provide a more specific product name.", response.getAnswer());
+    }
+
+    @Test
+    void streamChatNormalizesMessageAndDelegatesToAiGateway() throws Exception {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        customerServiceService.streamChat("  Request refund  ", "conversation-3", "Bearer stream-token", outputStream);
+
+        ArgumentCaptor<CustomerServiceChatRequest> requestCaptor =
+                ArgumentCaptor.forClass(CustomerServiceChatRequest.class);
+        verify(aiCustomerServiceClient).streamChat(requestCaptor.capture(), any());
+        assertEquals("Request refund", requestCaptor.getValue().getMessage());
+        assertEquals("conversation-3", requestCaptor.getValue().getConversationId());
+        assertEquals("Bearer stream-token", requestCaptor.getValue().getAuthToken());
+        verifyNoInteractions(knowledgeBaseService);
+    }
+}

@@ -1,0 +1,50 @@
+flowchart TD
+    classDef start fill:#eef2ff,stroke:#6366f1,color:#1e1b4b,stroke-width:2px;
+    classDef action fill:#f8fafc,stroke:#334155,color:#0f172a,stroke-width:1.5px;
+    classDef tool fill:#eff6ff,stroke:#2563eb,color:#0f172a,stroke-width:1.5px;
+    classDef good fill:#f0fdf4,stroke:#16a34a,color:#14532d,stroke-width:1.5px;
+    classDef ext fill:#faf5ff,stroke:#9333ea,color:#581c87,stroke-width:1.5px;
+    classDef warn fill:#fff7ed,stroke:#f97316,color:#7c2d12,stroke-width:1.5px;
+
+    A[用户提问]:::start
+    B[输入归一化<br/>别名 / 型号 / 品牌 / 规格词]:::action
+    C[意图分类<br/>商品查询 / 站内知识 / 外部实时信息]:::action
+
+    D{商品查询类?}:::tool
+    E[实体解析<br/>识别商品系列 / 型号 / SKU 条件]:::tool
+    F{是否唯一命中}:::tool
+    G[追问澄清<br/>容量 / 颜色 / 版本 / 套餐]:::warn
+    H[调用后端商品实时接口<br/>价格 / 库存 / SKU]:::tool
+    I[基于真实商品数据回答<br/>附：实际价格和库存以下单页为准]:::good
+
+    J{站内知识类?}:::tool
+    K[LightRAG / RAG 检索<br/>政策 / 说明 / 配件 / FAQ]:::tool
+    L[整合检索结果生成回答]:::good
+
+    M[联网搜索工具<br/>新闻 / 外部规则 / 第三方实时信息]:::ext
+    N[融合搜索结果生成回答]:::good
+
+    O[低置信度兜底<br/>明确说不确定，并提示用户补充信息]:::warn
+    P[最终输出]:::good
+
+    A --> B --> C --> D
+    D -- 是 --> E --> F
+    F -- 否 --> G --> P
+    F -- 是 --> H --> I --> P
+    D -- 否 --> J
+    J -- 是 --> K --> L --> P
+    J -- 否 --> M --> N --> P
+
+    C -.低置信度.-> O
+    E -.信息不足.-> O
+    K -.未命中.-> O
+    M -.未找到可靠结果.-> O
+    O --> P
+
+    R1[目标收益 1<br/>商品类问题优先走实时数据]:::good
+    R2[目标收益 2<br/>知识库只处理站内知识，不硬扛实时价格]:::good
+    R3[目标收益 3<br/>引入追问和置信度分层，减少误答]:::good
+
+    I --- R1
+    K --- R2
+    O --- R3

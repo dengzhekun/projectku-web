@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.web.mapper.KnowledgeBaseMapper">
+
+    <resultMap id="KbDocumentMap" type="com.web.pojo.KbDocument">
+        <id property="id" column="id"/>
+        <result property="title" column="title"/>
+        <result property="category" column="category"/>
+        <result property="sourceType" column="source_type"/>
+        <result property="status" column="status"/>
+        <result property="version" column="version"/>
+        <result property="storagePath" column="storage_path"/>
+        <result property="contentText" column="content_text"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="KbChunkMap" type="com.web.pojo.KbChunk">
+        <id property="id" column="id"/>
+        <result property="documentId" column="document_id"/>
+        <result property="chunkIndex" column="chunk_index"/>
+        <result property="content" column="content"/>
+        <result property="charCount" column="char_count"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <resultMap id="KbIndexRecordMap" type="com.web.pojo.KbIndexRecord">
+        <id property="id" column="id"/>
+        <result property="documentId" column="document_id"/>
+        <result property="version" column="version"/>
+        <result property="embeddingProvider" column="embedding_provider"/>
+        <result property="vectorCollection" column="vector_collection"/>
+        <result property="indexedChunkCount" column="indexed_chunk_count"/>
+        <result property="status" column="status"/>
+        <result property="errorMessage" column="error_message"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <resultMap id="KbHitLogMap" type="com.web.pojo.KbHitLog">
+        <id property="id" column="id"/>
+        <result property="documentId" column="document_id"/>
+        <result property="chunkId" column="chunk_id"/>
+        <result property="queryText" column="query_text"/>
+        <result property="conversationId" column="conversation_id"/>
+        <result property="hitTime" column="hit_time"/>
+    </resultMap>
+
+    <resultMap id="KbMissLogMap" type="com.web.pojo.KbMissLog">
+        <id property="id" column="id"/>
+        <result property="queryText" column="query_text"/>
+        <result property="conversationId" column="conversation_id"/>
+        <result property="confidence" column="confidence"/>
+        <result property="fallbackReason" column="fallback_reason"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <resultMap id="CustomerServiceLogMap" type="com.web.pojo.CustomerServiceLog">
+        <id property="id" column="id"/>
+        <result property="queryText" column="query_text"/>
+        <result property="conversationId" column="conversation_id"/>
+        <result property="route" column="route"/>
+        <result property="sourceType" column="source_type"/>
+        <result property="sourceId" column="source_id"/>
+        <result property="confidence" column="confidence"/>
+        <result property="fallbackReason" column="fallback_reason"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <insert id="insertDocument" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO kb_document(title, category, source_type, status, version, storage_path, content_text, created_by)
+        VALUES (#{title}, #{category}, #{sourceType}, #{status}, #{version}, #{storagePath}, #{contentText}, #{createdBy})
+    </insert>
+
+    <update id="updateDocument">
+        UPDATE kb_document
+        SET title = #{title},
+            category = #{category},
+            status = #{status},
+            version = #{version},
+            storage_path = #{storagePath},
+            content_text = #{contentText},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <select id="getDocumentById" resultMap="KbDocumentMap">
+        SELECT id,
+               title,
+               category,
+               source_type,
+               status,
+               version,
+               storage_path,
+               content_text,
+               created_by,
+               created_at,
+               updated_at
+        FROM kb_document
+        WHERE id = #{id}
+    </select>
+
+    <select id="getDocuments" resultMap="KbDocumentMap">
+        SELECT id,
+               title,
+               category,
+               source_type,
+               status,
+               version,
+               storage_path,
+               content_text,
+               created_by,
+               created_at,
+               updated_at
+        FROM kb_document
+        <where>
+            <if test="category != null and category != ''">
+                AND category = #{category}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (
+                    title LIKE CONCAT('%', #{keyword}, '%')
+                    OR content_text LIKE CONCAT('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+        ORDER BY id DESC
+    </select>
+
+    <delete id="deleteDocument">
+        DELETE FROM kb_document
+        WHERE id = #{id}
+    </delete>
+
+    <delete id="deleteChunksByDocumentId">
+        DELETE FROM kb_chunk
+        WHERE document_id = #{documentId}
+    </delete>
+
+    <insert id="insertChunk" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO kb_chunk(document_id, chunk_index, content, char_count, status)
+        VALUES (#{documentId}, #{chunkIndex}, #{content}, #{charCount}, #{status})
+    </insert>
+
+    <select id="getChunksByDocumentId" resultMap="KbChunkMap">
+        SELECT id,
+               document_id,
+               chunk_index,
+               content,
+               char_count,
+               status,
+               created_at
+        FROM kb_chunk
+        WHERE document_id = #{documentId}
+        ORDER BY chunk_index ASC
+    </select>
+
+    <delete id="deleteIndexRecordsByDocumentId">
+        DELETE FROM kb_index_record
+        WHERE document_id = #{documentId}
+    </delete>
+
+    <insert id="insertIndexRecord" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO kb_index_record(document_id, version, embedding_provider, vector_collection, indexed_chunk_count, status, error_message)
+        VALUES (#{documentId}, #{version}, #{embeddingProvider}, #{vectorCollection}, #{indexedChunkCount}, #{status}, #{errorMessage})
+    </insert>
+
+    <select id="getIndexRecordsByDocumentId" resultMap="KbIndexRecordMap">
+        SELECT id,
+               document_id,
+               version,
+               embedding_provider,
+               vector_collection,
+               indexed_chunk_count,
+               status,
+               error_message,
+               created_at
+        FROM kb_index_record
+        WHERE document_id = #{documentId}
+        ORDER BY id DESC
+    </select>
+
+    <delete id="deleteHitLogsByDocumentId">
+        DELETE FROM kb_hit_log
+        WHERE document_id = #{documentId}
+    </delete>
+
+    <insert id="insertHitLog" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO kb_hit_log(document_id, chunk_id, query_text, conversation_id)
+        VALUES (#{documentId}, #{chunkId}, #{queryText}, #{conversationId})
+    </insert>
+
+    <select id="getHitLogsByDocumentId" resultMap="KbHitLogMap">
+        SELECT id,
+               document_id,
+               chunk_id,
+               query_text,
+               conversation_id,
+               hit_time
+        FROM kb_hit_log
+        WHERE document_id = #{documentId}
+        ORDER BY id DESC
+    </select>
+
+    <insert id="insertMissLog" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO kb_miss_log(query_text, conversation_id, confidence, fallback_reason, status)
+        VALUES (#{queryText}, #{conversationId}, #{confidence}, #{fallbackReason}, #{status})
+    </insert>
+
+    <select id="getMissLogs" resultMap="KbMissLogMap">
+        SELECT id,
+               query_text,
+               conversation_id,
+               confidence,
+               fallback_reason,
+               status,
+               created_at
+        FROM kb_miss_log
+        <where>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND query_text LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+        </where>
+        ORDER BY id DESC
+        LIMIT 200
+    </select>
+
+    <insert id="insertCustomerServiceLog" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO customer_service_log(query_text, conversation_id, route, source_type, source_id, confidence, fallback_reason)
+        VALUES (#{queryText}, #{conversationId}, #{route}, #{sourceType}, #{sourceId}, #{confidence}, #{fallbackReason})
+    </insert>
+
+    <select id="getCustomerServiceLogs" resultMap="CustomerServiceLogMap">
+        SELECT id,
+               query_text,
+               conversation_id,
+               route,
+               source_type,
+               source_id,
+               confidence,
+               fallback_reason,
+               created_at
+        FROM customer_service_log
+        <where>
+            <if test="route != null and route != ''">
+                AND route = #{route}
+            </if>
+            <if test="sourceType != null and sourceType != ''">
+                AND source_type = #{sourceType}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND query_text LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+        </where>
+        ORDER BY id DESC
+        LIMIT 200
+    </select>
+
+</mapper>

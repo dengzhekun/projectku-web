@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.web.mapper.WalletTransactionMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wallet_transactions(user_id, order_id, trade_id, type, amount, balance_after, remark, create_time)
+        VALUES (#{userId}, #{orderId}, #{tradeId}, #{type}, #{amount}, #{balanceAfter}, #{remark}, NOW())
+    </insert>
+
+    <select id="listByUserId" resultType="com.web.pojo.WalletTransaction">
+        SELECT * FROM wallet_transactions
+        WHERE user_id = #{userId}
+        ORDER BY create_time DESC
+        LIMIT 50
+    </select>
+
+</mapper>

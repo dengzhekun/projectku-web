@@ -1,0 +1,128 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: projectku-mysql-prod
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-web}
+      TZ: Asia/Shanghai
+    command:
+      - mysqld
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./back/sql/init_db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-123456}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./back
+    container_name: projectku-backend-prod
+    restart: unless-stopped
+    environment:
+      AI_SERVICE_BASE_URL: http://ai-service:9000
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-web}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: projectku-neo4j-prod
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-12345678}
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+
+  ai-service:
+    build:
+      context: ./ai-service
+    container_name: projectku-ai-service-prod
+    restart: unless-stopped
+    env_file:
+      - ./deploy/ai-service.env
+    environment:
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-12345678}
+      LIGHTRAG_BASE_URL: http://lightrag:9621
+      LIGHTRAG_TIMEOUT_SECONDS: "60"
+      LIGHTRAG_QUERY_MODE: hybrid
+    volumes:
+      - ai-service-data:/app/data
+    depends_on:
+      - neo4j
+
+  lightrag-postgres:
+    image: pgvector/pgvector:pg16
+    container_name: projectku-lightrag-postgres-prod
+    restart: unless-stopped
+    env_file:
+      - ./deploy/lightrag.env
+    environment:
+      POSTGRES_DB: ${LIGHTRAG_POSTGRES_DB:-lightrag}
+      POSTGRES_USER: ${LIGHTRAG_POSTGRES_USER:-lightrag}
+      TZ: Asia/Shanghai
+    volumes:
+      - lightrag-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  lightrag:
+    image: ghcr.io/hkuds/lightrag:latest
+    container_name: projectku-lightrag-prod
+    restart: unless-stopped
+    env_file:
+      - ./deploy/lightrag.env
+    ports:
+      - "127.0.0.1:19621:9621"
+    volumes:
+      - lightrag-rag-storage:/app/rag_storage
+      - lightrag-inputs:/app/inputs
+    depends_on:
+      ai-service:
+        condition: service_started
+      neo4j:
+        condition: service_started
+      lightrag-postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: projectku-frontend-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql-data:
+  ai-service-data:
+  neo4j-data:
+  neo4j-logs:
+  lightrag-postgres-data:
+  lightrag-rag-storage:
+  lightrag-inputs:
