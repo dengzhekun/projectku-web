@@ -17,6 +17,7 @@ vi deploy/lightrag.env
 ```
 
 If you only need the quick operator view, start with `deploy/README.md`.
+For recurring operator questions, also keep `docs/deployment-faq.md` nearby.
 
 ## Runtime Architecture
 
