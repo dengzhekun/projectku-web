@@ -5,6 +5,7 @@ on:
     paths:
       - "frontend/**"
       - "back/**"
+      - "ai-service/**"
       - "scripts/verify_frontend_text_encoding.js"
       - ".github/workflows/**"
   push:
@@ -13,6 +14,7 @@ on:
     paths:
       - "frontend/**"
       - "back/**"
+      - "ai-service/**"
       - "scripts/verify_frontend_text_encoding.js"
       - ".github/workflows/**"
 
@@ -69,3 +71,43 @@ jobs:
       - name: Run Backend Tests
         run: mvn -q test
         working-directory: back
+
+  ai-service-light:
+    name: AI Service Lightweight Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: ai-service/requirements.remote.txt
+
+      - name: Install AI Service Test Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.remote.txt pytest
+        working-directory: ai-service
+
+      - name: Run AI Service Lightweight Test Subset
+        run: |
+          pytest -q \
+            tests/test_config.py \
+            tests/test_sync_job.py \
+            tests/test_product_tool_client.py \
+            tests/test_business_tool_client.py \
+            tests/test_lightrag_metadata_codec.py \
+            tests/test_lightrag_client.py \
+            tests/test_lightrag_retriever.py \
+            tests/test_knowledge_retriever.py \
+            tests/test_embedding_client.py \
+            tests/test_neo4j_retriever.py \
+            tests/test_chroma_retriever.py \
+            tests/test_indexing_api.py
+        working-directory: ai-service
