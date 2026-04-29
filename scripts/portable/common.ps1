@@ -79,59 +79,80 @@ function Get-PortablePidFilePath {
 function Stop-PortableProcessByPidFile {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$PidFilePath
+        [string]$PidFilePath,
+        [string]$RepoRoot
     )
 
     if (-not (Test-Path -LiteralPath $PidFilePath)) {
         return $false
     }
 
+    if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+        $pidDir = Split-Path -Parent -Path $PidFilePath
+        $RepoRoot = Split-Path -Parent -Path $pidDir
+    }
+
     $raw = (Get-Content -LiteralPath $PidFilePath -ErrorAction Stop -Raw).Trim()
     if (-not $raw) {
+        Remove-Item -LiteralPath $PidFilePath -Force -ErrorAction SilentlyContinue
         return $false
     }
 
-    # Backward compatibility: legacy bare PID files are treated conservatively.
-    if ($raw -notmatch "^\s*\{") {
+    $processId = 0
+    $expectedName = ""
+    $expectedStart = [DateTime]::MinValue
+    $hasExpectedStart = $false
+    $legacyMode = $false
+
+    if ($raw -match "^\d+$") {
+        # Legacy bare-PID format: allow guarded handling only.
+        if (-not [int]::TryParse($raw, [ref]$processId)) {
+            Remove-Item -LiteralPath $PidFilePath -Force -ErrorAction SilentlyContinue
+            return $false
+        }
+        $legacyMode = $true
+    }
+    elseif ($raw -match "^\s*\{") {
+        try {
+            $pidData = $raw | ConvertFrom-Json -ErrorAction Stop
+        }
+        catch {
+            Remove-Item -LiteralPath $PidFilePath -Force -ErrorAction SilentlyContinue
+            return $false
+        }
+
+        if (
+            $null -eq $pidData -or
+            $null -eq $pidData.pid -or
+            [string]::IsNullOrWhiteSpace([string]$pidData.processName) -or
+            [string]::IsNullOrWhiteSpace([string]$pidData.startedAt)
+        ) {
+            Remove-Item -LiteralPath $PidFilePath -Force -ErrorAction SilentlyContinue
+            return $false
+        }
+
+        if (-not [int]::TryParse([string]$pidData.pid, [ref]$processId)) {
+            Remove-Item -LiteralPath $PidFilePath -Force -ErrorAction SilentlyContinue
+            return $false
+        }
+
+        $expectedName = [string]$pidData.processName
+        if (-not [DateTime]::TryParse([string]$pidData.startedAt, [ref]$expectedStart)) {
+            Remove-Item -LiteralPath $PidFilePath -Force -ErrorAction SilentlyContinue
+            return $false
+        }
+        $hasExpectedStart = $true
+    }
+    else {
+        Remove-Item -LiteralPath $PidFilePath -Force -ErrorAction SilentlyContinue
         return $false
     }
-
-    try {
-        $pidData = $raw | ConvertFrom-Json -ErrorAction Stop
-    }
-    catch {
-        return $false
-    }
-
-    if (
-        $null -eq $pidData -or
-        $null -eq $pidData.pid -or
-        [string]::IsNullOrWhiteSpace([string]$pidData.processName) -or
-        [string]::IsNullOrWhiteSpace([string]$pidData.startedAt)
-    ) {
-        return $false
-    }
-
-    [int]$processId = 0
-    if (-not [int]::TryParse([string]$pidData.pid, [ref]$processId)) {
-        return $false
-    }
-
-    $expectedName = [string]$pidData.processName
     $proc = Get-Process -Id $processId -ErrorAction SilentlyContinue
     if ($null -eq $proc) {
         Remove-Item -LiteralPath $PidFilePath -Force -ErrorAction SilentlyContinue
         return $false
     }
 
-    if (-not [string]::Equals($proc.ProcessName, $expectedName, [System.StringComparison]::OrdinalIgnoreCase)) {
-        return $false
-    }
-
-    [DateTime]$expectedStart = [DateTime]::MinValue
-    if (-not [DateTime]::TryParse([string]$pidData.startedAt, [ref]$expectedStart)) {
-        return $false
-    }
     try {
         $actualStart = $proc.StartTime
     }
@@ -139,10 +160,49 @@ function Stop-PortableProcessByPidFile {
         return $false
     }
 
-    $expectedUtc = $expectedStart.ToUniversalTime()
-    $actualUtc = $actualStart.ToUniversalTime()
-    if ($actualUtc.Ticks -ne $expectedUtc.Ticks) {
-        return $false
+    if ($legacyMode) {
+        # Guarded legacy support: only stop our own service shell process shape.
+        $nameOk = [string]::Equals($proc.ProcessName, "powershell", [System.StringComparison]::OrdinalIgnoreCase) -or
+            [string]::Equals($proc.ProcessName, "pwsh", [System.StringComparison]::OrdinalIgnoreCase)
+        if (-not $nameOk) {
+            return $false
+        }
+
+        $procCmd = ""
+        try {
+            $cim = Get-CimInstance -ClassName Win32_Process -Filter ("ProcessId = {0}" -f $processId) -ErrorAction SilentlyContinue
+            if ($null -ne $cim) {
+                $procCmd = [string]$cim.CommandLine
+            }
+        }
+        catch {
+            $procCmd = ""
+        }
+
+        if ([string]::IsNullOrWhiteSpace($procCmd)) {
+            return $false
+        }
+
+        $repoEscaped = [Regex]::Escape($RepoRoot)
+        $looksLikeRepoShell = $procCmd -match $repoEscaped
+        $looksLikeService = ($procCmd -match "mvn\s+spring-boot:run") -or
+            ($procCmd -match "uvicorn\s+app\.main:app") -or
+            ($procCmd -match "npm\s+run\s+dev")
+        if ((-not $looksLikeRepoShell) -or (-not $looksLikeService)) {
+            return $false
+        }
+    }
+    else {
+        if (-not [string]::Equals($proc.ProcessName, $expectedName, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $false
+        }
+        if ($hasExpectedStart) {
+            $expectedUtc = $expectedStart.ToUniversalTime()
+            $actualUtc = $actualStart.ToUniversalTime()
+            if ($actualUtc.Ticks -ne $expectedUtc.Ticks) {
+                return $false
+            }
+        }
     }
 
     Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
@@ -387,4 +447,13 @@ function Install-PortableAiServiceDependencies {
     finally {
         Pop-Location
     }
+}
+
+function Test-PortablePortListening {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$Port
+    )
+
+    return [bool](Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
 }

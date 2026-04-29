@@ -5,7 +5,10 @@ param(
   [switch]$SkipDb,
   [switch]$InitDb,
   [switch]$InstallAiDeps,
-  [switch]$SeedAiKb
+  [switch]$SeedAiKb,
+  [switch]$SkipAiDependencyInstall,
+  [switch]$SkipKbSeed,
+  [switch]$Portable
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,7 +42,22 @@ function Start-Window([string]$Name, [string]$WorkingDirectory, [string]$Command
   $escapedLog = $log.Replace("'", "''")
   $script = "& { Set-Location -LiteralPath '$escapedWorkingDirectory'; $Command } *>&1 | Tee-Object -FilePath '$escapedLog'"
   $process = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoExit", "-Command", $script) -PassThru
-  Set-Content -Path $pidFile -Value $process.Id -Encoding ASCII
+  if ($Portable) {
+    $startedAt = ""
+    try {
+      $startedAt = $process.StartTime.ToUniversalTime().ToString("o")
+    } catch {
+      $startedAt = (Get-Date).ToUniversalTime().ToString("o")
+    }
+    $pidData = [PSCustomObject]@{
+      pid = $process.Id
+      processName = $process.ProcessName
+      startedAt = $startedAt
+    }
+    $pidData | ConvertTo-Json | Set-Content -Path $pidFile -Encoding ASCII
+  } else {
+    Set-Content -Path $pidFile -Value $process.Id -Encoding ASCII
+  }
   Write-Host "Started $Name (pid=$($process.Id)), logs: $log"
 }
 
@@ -76,6 +94,8 @@ function Start-DatabaseIfNeeded {
 
 function Start-Dev {
   Start-DatabaseIfNeeded
+  $doInstallAiDeps = $InstallAiDeps -and (-not $SkipAiDependencyInstall)
+  $doSeedAiKb = $SeedAiKb -and (-not $SkipKbSeed)
 
   if (-not (Test-Path (Join-Path $BackendDir "pom.xml"))) {
     throw "Backend pom.xml not found: $BackendDir"
@@ -90,7 +110,7 @@ function Start-Dev {
   if (-not (Test-Command "npm.cmd")) { throw "npm not found" }
   if (-not (Test-Command "python")) { throw "python not found" }
 
-  if ($InstallAiDeps) {
+  if ($doInstallAiDeps) {
     if ($DryRun) {
       Write-Host "[dry-run] python -m pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com"
     } else {
@@ -100,7 +120,7 @@ function Start-Dev {
     }
   }
 
-  if ($SeedAiKb) {
+  if ($doSeedAiKb) {
     if ($DryRun) {
       Write-Host "[dry-run] python app/ingest/sync_job.py"
     } else {
