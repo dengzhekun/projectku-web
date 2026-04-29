@@ -142,11 +142,11 @@ Steps from repo root on Windows PowerShell:
 
 ```powershell
 .\run-portable.bat
-.\doctor-portable.bat
-.\stop-portable.bat
+.\run-portable.bat doctor
+.\run-portable.bat stop
 ```
 
-Typical handoff flow is: unzip the project bundle on the target Windows PC, run `run-portable.bat`, and let it handle first-time setup plus startup automatically. After that, keep using `run-portable.bat` for daily startup, `doctor-portable.bat` for checks, and `stop-portable.bat` to stop the local stack.
+Typical handoff flow is: unzip the project bundle on the target Windows PC, run `run-portable.bat`, and let it handle first-time setup plus startup automatically. After that, keep using `run-portable.bat` for daily startup, `run-portable.bat doctor` for checks, and `run-portable.bat stop` to stop the local stack.
 
 Portable runtime state stays under repo-local paths (for example `.portable/`, `.pids/`, and `.runtime-logs/`) so the bundle remains self-contained.
 

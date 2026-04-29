@@ -96,11 +96,11 @@ Run:
 
 ```powershell
 .\run-portable.bat
-.\doctor-portable.bat
-.\stop-portable.bat
+.\run-portable.bat doctor
+.\run-portable.bat stop
 ```
 
-`run-portable.bat` is the main entrypoint. On a new machine it performs first-time setup automatically, then starts the local stack. After that, use `run-portable.bat` for daily startup and `stop-portable.bat` to shut the stack down. Portable runtime files stay in repo-local directories (such as `.portable`, `.pids`, and `.runtime-logs`).
+`run-portable.bat` is the main entrypoint. On a new machine it performs first-time setup automatically, then starts the local stack. After that, use `run-portable.bat` for daily startup, `run-portable.bat doctor` for checks, and `run-portable.bat stop` to shut the stack down. Portable runtime files stay in repo-local directories (such as `.portable`, `.pids`, and `.runtime-logs`).
 
 ## How do I generate a zip to send to another Windows machine?
 
