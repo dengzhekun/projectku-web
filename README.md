@@ -141,13 +141,12 @@ Prerequisites:
 Steps from repo root on Windows PowerShell:
 
 ```powershell
-.\setup-portable.bat
-.\start-portable.bat
+.\run-portable.bat
 .\doctor-portable.bat
 .\stop-portable.bat
 ```
 
-Typical handoff flow is: unzip the project bundle on the target Windows PC, run `setup-portable.bat` once, then use `start-portable.bat` / `doctor-portable.bat` / `stop-portable.bat` for daily operation.
+Typical handoff flow is: unzip the project bundle on the target Windows PC, run `run-portable.bat`, and let it handle first-time setup plus startup automatically. After that, keep using `run-portable.bat` for daily startup, `doctor-portable.bat` for checks, and `stop-portable.bat` to stop the local stack.
 
 Portable runtime state stays under repo-local paths (for example `.portable/`, `.pids/`, and `.runtime-logs/`) so the bundle remains self-contained.
 
@@ -157,7 +156,7 @@ To generate a handoff zip from the current machine:
 .\package-portable.bat
 ```
 
-The package is written under `.portable\dist\`. By default it excludes heavy local runtime folders such as `frontend\node_modules`, `back\target`, `.pids`, `logs`, and `mysql-data`. The current private AI config is copied into `.portable\private\ai-service.env` inside the zip so the target machine can restore it during `setup-portable.bat`.
+The package is written under `.portable\dist\`. By default it excludes heavy local runtime folders such as `frontend\node_modules`, `back\target`, `.pids`, `logs`, and `mysql-data`. The current private AI config is copied into `.portable\private\ai-service.env` inside the zip so the target machine can restore it during the first `run-portable.bat`.
 
 ### 3) Production deployment
 

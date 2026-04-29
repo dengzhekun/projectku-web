@@ -205,41 +205,52 @@ function Stop-PortableProcessByPidFile {
         }
     }
 
-    $childrenByParent = @{}
+    $taskkillSucceeded = $false
     try {
-        $allProc = Get-CimInstance -ClassName Win32_Process -ErrorAction SilentlyContinue
-        foreach ($p in $allProc) {
-            $ppid = [int]$p.ParentProcessId
-            if (-not $childrenByParent.ContainsKey($ppid)) {
-                $childrenByParent[$ppid] = New-Object System.Collections.ArrayList
-            }
-            [void]$childrenByParent[$ppid].Add([int]$p.ProcessId)
-        }
+        & taskkill /PID $processId /T /F 1>$null 2>$null
+        $taskkillSucceeded = ($LASTEXITCODE -eq 0)
     }
     catch {
-        $childrenByParent = @{}
+        $taskkillSucceeded = $false
     }
 
-    $descendantIds = New-Object System.Collections.ArrayList
-    $stack = New-Object System.Collections.Stack
-    $stack.Push([int]$processId)
-    while ($stack.Count -gt 0) {
-        $current = [int]$stack.Pop()
-        if ($childrenByParent.ContainsKey($current)) {
-            foreach ($childId in $childrenByParent[$current]) {
-                [void]$descendantIds.Add([int]$childId)
-                $stack.Push([int]$childId)
+    if (-not $taskkillSucceeded) {
+        $childrenByParent = @{}
+        try {
+            $allProc = Get-CimInstance -ClassName Win32_Process -ErrorAction SilentlyContinue
+            foreach ($p in $allProc) {
+                $ppid = [int]$p.ParentProcessId
+                if (-not $childrenByParent.ContainsKey($ppid)) {
+                    $childrenByParent[$ppid] = New-Object System.Collections.ArrayList
+                }
+                [void]$childrenByParent[$ppid].Add([int]$p.ProcessId)
             }
         }
+        catch {
+            $childrenByParent = @{}
+        }
+
+        $descendantIds = New-Object System.Collections.ArrayList
+        $stack = New-Object System.Collections.Stack
+        $stack.Push([int]$processId)
+        while ($stack.Count -gt 0) {
+            $current = [int]$stack.Pop()
+            if ($childrenByParent.ContainsKey($current)) {
+                foreach ($childId in $childrenByParent[$current]) {
+                    [void]$descendantIds.Add([int]$childId)
+                    $stack.Push([int]$childId)
+                }
+            }
+        }
+
+        for ($i = $descendantIds.Count - 1; $i -ge 0; $i--) {
+            $childId = [int]$descendantIds[$i]
+            Stop-Process -Id $childId -Force -ErrorAction SilentlyContinue
+        }
+
+        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
     }
 
-    # Deepest-first best effort stop of descendants before wrapper.
-    for ($i = $descendantIds.Count - 1; $i -ge 0; $i--) {
-        $childId = [int]$descendantIds[$i]
-        Stop-Process -Id $childId -Force -ErrorAction SilentlyContinue
-    }
-
-    Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
     $delaysMs = @(150, 250, 400, 500, 700)
     foreach ($delayMs in $delaysMs) {
         Start-Sleep -Milliseconds $delayMs

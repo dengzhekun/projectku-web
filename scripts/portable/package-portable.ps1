@@ -116,8 +116,7 @@ Portable package generated: $stamp
 
 Target machine workflow:
 1. unzip this package to a non-system path
-2. run setup-portable.bat
-3. run start-portable.bat
+2. run run-portable.bat
 4. use doctor-portable.bat and stop-portable.bat for daily operation
 
 Bundled private AI config:
