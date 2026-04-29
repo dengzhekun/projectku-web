@@ -151,6 +151,14 @@ Typical handoff flow is: unzip the project bundle on the target Windows PC, run 
 
 Portable runtime state stays under repo-local paths (for example `.portable/`, `.pids/`, and `.runtime-logs/`) so the bundle remains self-contained.
 
+To generate a handoff zip from the current machine:
+
+```powershell
+.\package-portable.bat
+```
+
+The package is written under `.portable\dist\`. By default it excludes heavy local runtime folders such as `frontend\node_modules`, `back\target`, `.pids`, `logs`, and `mysql-data`. The current private AI config is copied into `.portable\private\ai-service.env` inside the zip so the target machine can restore it during `setup-portable.bat`.
+
 ### 3) Production deployment
 
 Fastest production path (Linux server):

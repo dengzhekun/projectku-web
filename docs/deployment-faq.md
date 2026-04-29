@@ -102,3 +102,13 @@ Run:
 ```
 
 `setup-portable.bat` is the one-time initialization step on that machine. For repeat daily use, run start/doctor/stop only. Portable runtime files stay in repo-local directories (such as `.portable`, `.pids`, and `.runtime-logs`).
+
+## How do I generate a zip to send to another Windows machine?
+
+Run this from the repo root on the source machine:
+
+```powershell
+.\package-portable.bat
+```
+
+The zip is created under `.portable\dist\`. It excludes heavy local build/runtime folders by default and stages your current private AI config into `.portable\private\ai-service.env` inside the package so `setup-portable.bat` on the target machine can restore it.
