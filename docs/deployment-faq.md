@@ -80,3 +80,25 @@ For local development, you can still run:
 - frontend with Vite
 
 Docker is mainly required for the packaged production stack.
+
+## How do I move this project to another Windows PC for private self-use?
+
+Use the portable workflow from the repo root after you unzip the project on the target machine.
+
+Prerequisites:
+
+- Docker Desktop
+- Java 17 + Maven
+- Node.js 20 + npm
+- Python 3.11+
+
+Run:
+
+```powershell
+.\setup-portable.bat
+.\start-portable.bat
+.\doctor-portable.bat
+.\stop-portable.bat
+```
+
+`setup-portable.bat` is the one-time initialization step on that machine. For repeat daily use, run start/doctor/stop only. Portable runtime files stay in repo-local directories (such as `.portable`, `.pids`, and `.runtime-logs`).

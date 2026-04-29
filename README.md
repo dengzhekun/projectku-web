@@ -127,6 +127,30 @@ Optional frontend text-encoding regression check:
 node scripts/verify_frontend_text_encoding.js
 ```
 
+### Windows Portable Bundle
+
+Use this workflow when you want to move the project folder to another Windows PC for private self-use and run it locally from that repo copy.
+
+Prerequisites:
+
+- Docker Desktop
+- Java 17 + Maven (`mvn`)
+- Node.js 20 + npm (`npm`)
+- Python 3.11+ (`python`)
+
+Steps from repo root on Windows PowerShell:
+
+```powershell
+.\setup-portable.bat
+.\start-portable.bat
+.\doctor-portable.bat
+.\stop-portable.bat
+```
+
+Typical handoff flow is: unzip the project bundle on the target Windows PC, run `setup-portable.bat` once, then use `start-portable.bat` / `doctor-portable.bat` / `stop-portable.bat` for daily operation.
+
+Portable runtime state stays under repo-local paths (for example `.portable/`, `.pids/`, and `.runtime-logs/`) so the bundle remains self-contained.
+
 ### 3) Production deployment
 
 Fastest production path (Linux server):
