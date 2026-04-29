@@ -49,3 +49,4 @@ deploy/ai-service.env
 deploy/prod.env
 .~*
 新建 文本文档.txt
+.portable/
