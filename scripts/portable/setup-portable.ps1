@@ -43,12 +43,17 @@ Write-Host "MySQL is ready."
 
 $setupComplete = Test-PortableSetupMarker -RepoRoot $repoRoot
 $dbInitialized = Test-PortableDatabaseInitialized -RepoRoot $repoRoot
-if ((-not $setupComplete) -or (-not $dbInitialized)) {
+if (-not $dbInitialized) {
     Initialize-PortableDatabase -RepoRoot $repoRoot
     Write-Host "Database initialized from back\\sql\\init_db.sql."
 }
 else {
-    Write-Host "Setup marker and database state detected; skipping database re-initialization."
+    if (-not $setupComplete) {
+        Write-Host "Database already initialized but setup marker is missing; skipping database re-initialization."
+    }
+    else {
+        Write-Host "Setup marker and database state detected; skipping database re-initialization."
+    }
 }
 
 Install-PortableFrontendDependencies -RepoRoot $repoRoot

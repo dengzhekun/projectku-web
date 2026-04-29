@@ -205,6 +205,40 @@ function Stop-PortableProcessByPidFile {
         }
     }
 
+    $childrenByParent = @{}
+    try {
+        $allProc = Get-CimInstance -ClassName Win32_Process -ErrorAction SilentlyContinue
+        foreach ($p in $allProc) {
+            $ppid = [int]$p.ParentProcessId
+            if (-not $childrenByParent.ContainsKey($ppid)) {
+                $childrenByParent[$ppid] = New-Object System.Collections.ArrayList
+            }
+            [void]$childrenByParent[$ppid].Add([int]$p.ProcessId)
+        }
+    }
+    catch {
+        $childrenByParent = @{}
+    }
+
+    $descendantIds = New-Object System.Collections.ArrayList
+    $stack = New-Object System.Collections.Stack
+    $stack.Push([int]$processId)
+    while ($stack.Count -gt 0) {
+        $current = [int]$stack.Pop()
+        if ($childrenByParent.ContainsKey($current)) {
+            foreach ($childId in $childrenByParent[$current]) {
+                [void]$descendantIds.Add([int]$childId)
+                $stack.Push([int]$childId)
+            }
+        }
+    }
+
+    # Deepest-first best effort stop of descendants before wrapper.
+    for ($i = $descendantIds.Count - 1; $i -ge 0; $i--) {
+        $childId = [int]$descendantIds[$i]
+        Stop-Process -Id $childId -Force -ErrorAction SilentlyContinue
+    }
+
     Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
     $delaysMs = @(150, 250, 400, 500, 700)
     foreach ($delayMs in $delaysMs) {
@@ -301,11 +335,35 @@ function Start-PortableMySqlContainer {
         [string]$RepoRoot
     )
 
+    $mysqlContainerName = "projectku-mysql"
+    $existingIdLine = @(& docker ps -aq -f ("name=^{0}$" -f $mysqlContainerName) 2>$null | Select-Object -First 1)
+    $existingId = ""
+    if ($existingIdLine.Count -gt 0 -and $null -ne $existingIdLine[0]) {
+        $existingId = [string]$existingIdLine[0]
+    }
+    if (-not [string]::IsNullOrWhiteSpace($existingId)) {
+        $runningIdLine = @(& docker ps -q -f ("name=^{0}$" -f $mysqlContainerName) 2>$null | Select-Object -First 1)
+        $runningId = ""
+        if ($runningIdLine.Count -gt 0 -and $null -ne $runningIdLine[0]) {
+            $runningId = [string]$runningIdLine[0]
+        }
+        if (-not [string]::IsNullOrWhiteSpace($runningId)) {
+            return
+        }
+
+        & docker start $mysqlContainerName 1>$null
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+
+        throw "MySQL container '$mysqlContainerName' exists but could not be started."
+    }
+
     Push-Location -LiteralPath $RepoRoot
     try {
         & docker compose up -d mysql
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to start mysql service via docker compose."
+            throw "Failed to start mysql service via docker compose and no reusable '$mysqlContainerName' container was available."
         }
     }
     finally {
@@ -321,12 +379,24 @@ function Get-PortableMySqlContainerId {
 
     Push-Location -LiteralPath $RepoRoot
     try {
-        $containerId = (& docker compose ps -q mysql | Select-Object -First 1).Trim()
-        return $containerId
+        $containerIdLine = @(& docker compose ps -q mysql 2>$null | Select-Object -First 1)
+        $containerId = ""
+        if ($containerIdLine.Count -gt 0 -and $null -ne $containerIdLine[0]) {
+            $containerId = [string]$containerIdLine[0]
+        }
+        if (-not [string]::IsNullOrWhiteSpace($containerId)) {
+            return $containerId
+        }
     }
     finally {
         Pop-Location
     }
+
+    $fallbackLine = @(& docker ps -aq -f "name=^projectku-mysql$" 2>$null | Select-Object -First 1)
+    if ($fallbackLine.Count -gt 0 -and $null -ne $fallbackLine[0]) {
+        return [string]$fallbackLine[0]
+    }
+    return ""
 }
 
 function Wait-PortableMySqlReady {
@@ -341,7 +411,10 @@ function Wait-PortableMySqlReady {
     do {
         $containerId = Get-PortableMySqlContainerId -RepoRoot $RepoRoot
         if (-not [string]::IsNullOrWhiteSpace($containerId)) {
-            & docker exec $containerId mysqladmin ping -h 127.0.0.1 -uroot ("-p{0}" -f $RootPassword) --silent 2>$null
+            $previousErrorAction = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            & docker exec $containerId mysqladmin ping -h 127.0.0.1 -uroot ("-p{0}" -f $RootPassword) --silent 1>$null 2>$null
+            $ErrorActionPreference = $previousErrorAction
             if ($LASTEXITCODE -eq 0) {
                 return $true
             }
@@ -370,12 +443,18 @@ function Initialize-PortableDatabase {
         throw "MySQL container id not found for docker compose service 'mysql'."
     }
 
-    & docker exec $containerId mysql -uroot ("-p{0}" -f $RootPassword) -e ("CREATE DATABASE IF NOT EXISTS `{0}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" -f $DatabaseName)
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & docker exec $containerId mysql -uroot ("-p{0}" -f $RootPassword) -e ("CREATE DATABASE IF NOT EXISTS `{0}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" -f $DatabaseName) 1>$null 2>$null
+    $ErrorActionPreference = $previousErrorAction
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to create database '$DatabaseName' when needed."
     }
 
-    Get-Content -LiteralPath $sqlPath -Raw | & docker exec -i $containerId mysql -uroot ("-p{0}" -f $RootPassword) $DatabaseName
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    Get-Content -LiteralPath $sqlPath -Raw | & docker exec -i $containerId mysql -uroot ("-p{0}" -f $RootPassword) $DatabaseName 1>$null 2>$null
+    $ErrorActionPreference = $previousErrorAction
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to initialize database from $sqlPath"
     }
@@ -396,12 +475,19 @@ function Test-PortableDatabaseInitialized {
     }
 
     $query = "SELECT 1 FROM information_schema.tables WHERE table_schema='{0}' AND table_name='{1}' LIMIT 1;" -f $DatabaseName, $KnownTable
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     $result = & docker exec $containerId mysql -N -B -uroot ("-p{0}" -f $RootPassword) -e $query 2>$null
+    $ErrorActionPreference = $previousErrorAction
     if ($LASTEXITCODE -ne 0) {
         return $false
     }
 
-    return (($result | Select-Object -First 1).Trim() -eq "1")
+    $first = $result | Select-Object -First 1
+    if ($null -eq $first) {
+        return $false
+    }
+    return ([string]$first).Trim() -eq "1"
 }
 
 function Install-PortableFrontendDependencies {

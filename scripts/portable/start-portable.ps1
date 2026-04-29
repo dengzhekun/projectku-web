@@ -29,4 +29,8 @@ if (-not (Test-Path -LiteralPath $startAllPath)) {
 }
 
 & $startAllPath -Mode dev -SkipDb -SkipAiDependencyInstall -SkipKbSeed -Portable
-exit $LASTEXITCODE
+if (-not $?) {
+    exit 1
+}
+
+exit 0

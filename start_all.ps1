@@ -131,7 +131,11 @@ function Start-Dev {
   }
 
   Start-Window "backend" $BackendDir "mvn spring-boot:run"
-  Start-Window "ai-service" $AiServiceDir "python -m uvicorn app.main:app --host 127.0.0.1 --port 9000 --reload"
+  $aiCommand = "python -m uvicorn app.main:app --host 127.0.0.1 --port 9000 --reload"
+  if ($Portable) {
+    $aiCommand = "python -m uvicorn app.main:app --host 127.0.0.1 --port 9000"
+  }
+  Start-Window "ai-service" $AiServiceDir $aiCommand
   Start-Window "frontend" $FrontendDir "npm run dev -- --host 127.0.0.1"
   Write-Host "Frontend: http://127.0.0.1:5173/"
   Write-Host "Backend:  http://localhost:8080/api"
