@@ -35,7 +35,7 @@ LightRAG runtime must have these groups set:
    - `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`
 
 For `ai-service` consumption:
-- keep `KNOWLEDGE_RETRIEVER` unchanged unless doing explicit rollout
+- set `KNOWLEDGE_RETRIEVER=lightrag`
 - `LIGHTRAG_BASE_URL`, `LIGHTRAG_API_KEY`, `LIGHTRAG_TIMEOUT_SECONDS`, `LIGHTRAG_QUERY_MODE`
 - optional `LIGHTRAG_API_KEY_HEADER` (defaults to `X-API-Key`)
 
@@ -72,10 +72,11 @@ Still operator-supplied placeholders:
    - `scripts/check_embedding_gateway.ps1 -BaseUrl http://127.0.0.1:9000/v1`
 7. Start `lightrag`.
 8. Run smoke check: `scripts/check_lightrag.ps1 -BaseUrl http://127.0.0.1:19621`.
-9. Keep `KNOWLEDGE_RETRIEVER=chroma` as default; trial with `lightrag_with_chroma_fallback` first when needed.
+9. Run `scripts/verify-lightrag-runtime.ps1` and confirm all checks pass before production query traffic.
+10. If local embedding backend is used (`AI_EMBEDDING_REMOTE_URL=http://127.0.0.1:9001/embed`), confirm `127.0.0.1:9001/health` is reachable.
 
-## 5) Rollback notes
+## 5) Failure handling notes
 
-1. Set `KNOWLEDGE_RETRIEVER=chroma` in `deploy/ai-service.env`.
-2. Restart only `ai-service`.
-3. Keep LightRAG/Postgres volumes for later retry.
+1. If LightRAG docs/status is healthy but query/index fails, check embedding gateway and embedding backend first.
+2. Re-run `scripts/check_embedding_gateway.ps1` and `scripts/verify-lightrag-runtime.ps1`.
+3. If using local embedding backend, restart `python scripts/local_embedding_server.py` and re-check port `9001`.

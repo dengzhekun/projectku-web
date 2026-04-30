@@ -33,7 +33,7 @@ ai:
     base-url: ${AI_SERVICE_BASE_URL:http://127.0.0.1:9000}
     timeout-seconds: ${AI_SERVICE_TIMEOUT_SECONDS:120}
     embedding-provider: ${AI_EMBEDDING_PROVIDER:local_bge_m3}
-    vector-collection: ${CHROMA_COLLECTION:ecommerce_kb_v1}
+    vector-collection: ${LIGHTRAG_COLLECTION:ecommerce_kb_v1}
 
 kb:
   storage:

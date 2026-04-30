@@ -136,14 +136,13 @@ docker compose --env-file deploy/prod.env -f docker-compose.prod.yml down
 
 Interpret `KNOWLEDGE_RETRIEVER` in `deploy/ai-service.env` like this:
 
-- `chroma`: safest current path
-- `lightrag`: pure LightRAG, all dependencies must be healthy
-- `lightrag_with_chroma_fallback`: safer trial mode for staged rollout
+- `lightrag`: default production path. AI customer-service KB retrieval, reindex, and delete depend on LightRAG.
 
-Fast rollback:
+Historical note:
 
-1. Set `KNOWLEDGE_RETRIEVER=chroma`
-2. Restart `ai-service`
+- `chroma` and `lightrag_with_chroma_fallback` were transition modes during the Chroma-to-LightRAG cutover.
+- Chroma is no longer part of the production retrieval chain. Do not use it as a rollback target for current deployments.
+- If an older environment still sets either historical value, change it to `KNOWLEDGE_RETRIEVER=lightrag`, verify LightRAG/PostgreSQL/Neo4j health, and reindex the KB if needed.
 
 ## Memory Guidance
 
@@ -165,4 +164,4 @@ For low-memory servers, prefer:
 
 - remote embeddings
 - moving Neo4j off the main app host
-- keeping `chroma` as the primary retrieval path first
+- monitoring LightRAG, PostgreSQL, and Neo4j resource usage before increasing local model load

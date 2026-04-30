@@ -11,6 +11,7 @@ import com.web.pojo.CartItem;
 import com.web.pojo.Order;
 import com.web.pojo.OrderItem;
 import com.web.pojo.Product;
+import com.web.pojo.ProductSku;
 import com.web.service.CouponService;
 import com.web.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -89,16 +90,18 @@ public class OrderServiceImpl implements OrderService {
                 throw new BusinessException("PRODUCT_NOT_FOUND", "商品不存在");
             }
 
+            ProductSku sku = resolveSku(cartItem, product);
             reserveStock(cartItem, product);
 
-            BigDecimal itemTotal = product.getPrice().multiply(new BigDecimal(cartItem.getQuantity()));
+            BigDecimal unitPrice = resolveUnitPrice(product, sku);
+            BigDecimal itemTotal = unitPrice.multiply(new BigDecimal(cartItem.getQuantity()));
             totalAmount = totalAmount.add(itemTotal);
 
             OrderItem orderItem = new OrderItem();
             orderItem.setProductId(product.getId());
             orderItem.setSkuId(cartItem.getSkuId());
             orderItem.setProductName(product.getName());
-            orderItem.setPrice(product.getPrice());
+            orderItem.setPrice(unitPrice);
             orderItem.setQuantity(cartItem.getQuantity());
             orderItem.setTotalAmount(itemTotal);
             orderItem.setProductImage("/product_" + product.getId() + ".jpg");
@@ -192,6 +195,24 @@ public class OrderServiceImpl implements OrderService {
         }
 
         return true;
+    }
+
+    private ProductSku resolveSku(CartItem cartItem, Product product) {
+        if (cartItem.getSkuId() == null) {
+            return null;
+        }
+        ProductSku sku = productMapper.getSkuById(cartItem.getSkuId());
+        if (sku == null || !product.getId().equals(sku.getProductId())) {
+            throw new BusinessException("SKU_INVALID", "商品规格不属于当前商品");
+        }
+        return sku;
+    }
+
+    private BigDecimal resolveUnitPrice(Product product, ProductSku sku) {
+        if (sku != null && sku.getPrice() != null) {
+            return sku.getPrice();
+        }
+        return product.getPrice();
     }
 
     private void reserveStock(CartItem cartItem, Product product) {

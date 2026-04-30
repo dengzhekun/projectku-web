@@ -3,14 +3,17 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+from json import JSONDecodeError
 
 from app.config import Settings
 
 
 class LightRagClient:
     _QUERY_ENDPOINT = "/query"
+    _QUERY_DATA_ENDPOINT = "/query/data"
     _INSERT_TEXT_ENDPOINT = "/documents/text"
     _INSERT_TEXTS_ENDPOINT = "/documents/texts"
+    _DELETE_DOCUMENT_ENDPOINT = "/documents/delete_document"
     _TRACK_STATUS_ENDPOINT_PREFIX = "/documents/track_status"
 
     def __init__(self, settings: Settings):
@@ -48,6 +51,22 @@ class LightRagClient:
         data = response.json()
         return data if isinstance(data, dict) else {"data": data}
 
+    def _delete(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+        url = f"{self.base_url}{endpoint}"
+        try:
+            with httpx.Client(timeout=self.timeout_seconds) as client:
+                response = client.request("DELETE", url, json=payload, headers=self._headers())
+                response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"LightRAG request failed for {endpoint}: {exc}") from exc
+        if not response.content:
+            return {}
+        try:
+            data = response.json()
+        except JSONDecodeError as exc:
+            raise RuntimeError(f"LightRAG request returned invalid JSON for {endpoint}: {exc}") from exc
+        return data if isinstance(data, dict) else {"data": data}
+
     def query(self, message: str, mode: str | None = None, top_k: int | None = None) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "query": message,
@@ -60,6 +79,29 @@ class LightRagClient:
             payload,
         )
 
+    def query_data(
+        self,
+        message: str,
+        mode: str | None = None,
+        top_k: int | None = None,
+        chunk_top_k: int | None = None,
+        enable_rerank: bool | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "query": message,
+            "mode": mode or self.query_mode,
+        }
+        if top_k is not None:
+            payload["top_k"] = top_k
+        if chunk_top_k is not None:
+            payload["chunk_top_k"] = chunk_top_k
+        if enable_rerank is not None:
+            payload["enable_rerank"] = enable_rerank
+        return self._post(
+            self._QUERY_DATA_ENDPOINT,
+            payload,
+        )
+
     def insert_text(self, text: str, description: str | None = None) -> dict[str, Any]:
         payload: dict[str, Any] = {"text": text}
         if description:
@@ -68,6 +110,22 @@ class LightRagClient:
 
     def insert_texts(self, texts: list[str]) -> dict[str, Any]:
         return self._post(self._INSERT_TEXTS_ENDPOINT, {"texts": texts})
+
+    def delete_documents(
+        self,
+        doc_ids: list[str],
+        *,
+        delete_file: bool = False,
+        delete_llm_cache: bool = False,
+    ) -> dict[str, Any]:
+        return self._delete(
+            self._DELETE_DOCUMENT_ENDPOINT,
+            {
+                "doc_ids": doc_ids,
+                "delete_file": delete_file,
+                "delete_llm_cache": delete_llm_cache,
+            },
+        )
 
     def track_status(self, track_id: str) -> dict[str, Any]:
         return self._get(f"{self._TRACK_STATUS_ENDPOINT_PREFIX}/{track_id}")

@@ -33,7 +33,13 @@ public interface KnowledgeBaseService {
 
     void indexDocument(Long id);
 
-    List<KnowledgeBaseResponses.BatchIndexItemResponse> batchIndexDocuments(Boolean allowLarge, Integer limit);
+    void indexDocument(Long id, Boolean recoverMapping);
+
+    List<KnowledgeBaseResponses.BatchIndexItemResponse> batchIndexDocuments(
+            Boolean allowLarge,
+            Integer limit,
+            Boolean includeIndexed,
+            Boolean recoverMapping);
 
     List<KnowledgeBaseResponses.IndexRecordResponse> getIndexRecords(Long id);
 
@@ -58,4 +64,6 @@ public interface KnowledgeBaseService {
             String route,
             String sourceType,
             String keyword);
+
+    KnowledgeBaseResponses.SyncHealthResponse getSyncHealth();
 }

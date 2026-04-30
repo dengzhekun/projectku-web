@@ -189,7 +189,48 @@ def test_chat_endpoint_handles_lightrag_like_retriever_metadata_safely(monkeypat
     assert body["hitLogs"] == [{"documentId": 11, "chunkId": 301}]
 
 
-def test_handle_chat_enriches_lightrag_answer_level_sources_from_chroma(monkeypatch):
+def test_build_citations_skips_invalid_entries_before_top_3_cutoff():
+    chunks = [
+        {"metadata": {"source_type": "kb", "source_id": None, "title": "invalid-1"}},
+        {"metadata": {"source_type": None, "source_id": "invalid-2", "title": "invalid-2"}},
+        {"metadata": {"source_type": "kb", "source_id": "kb-1", "title": "valid-1"}},
+        {"metadata": {"source_type": "kb", "source_id": "kb-2", "title": "valid-2"}},
+        {"metadata": {"source_type": "kb", "source_id": "kb-3", "title": "valid-3"}},
+        {"metadata": {"source_type": "kb", "source_id": "kb-4", "title": "valid-4"}},
+    ]
+
+    citations = chat_api.build_citations(chunks)
+
+    assert [(item.sourceType, item.sourceId, item.title) for item in citations] == [
+        ("kb", "kb-1", "valid-1"),
+        ("kb", "kb-2", "valid-2"),
+        ("kb", "kb-3", "valid-3"),
+    ]
+
+
+def test_build_citations_deduplicates_sources_before_limit():
+    chunks = [
+        {"metadata": {"source_type": "kb", "source_id": "kb-1", "title": "first"}},
+        {"metadata": {"source_type": "kb", "source_id": "kb-1", "title": "duplicate"}},
+        {"metadata": {"source_type": "kb", "source_id": "kb-2", "title": "second"}},
+        {"metadata": {"source_type": "kb", "source_id": "kb-3", "title": "third"}},
+        {"metadata": {"source_type": "kb", "source_id": "kb-4", "title": "fourth"}},
+    ]
+
+    citations = chat_api.build_citations(chunks)
+
+    assert [(item.sourceType, item.sourceId, item.title) for item in citations] == [
+        ("kb", "kb-1", "first"),
+        ("kb", "kb-2", "second"),
+        ("kb", "kb-3", "third"),
+    ]
+
+
+def test_classify_after_sales_state_query_uses_canonical_route():
+    assert chat_api.classify_customer_service_route("我的售后进度怎么样") == "after_sales"
+
+
+def test_handle_chat_degrades_safely_for_lightrag_answer_level_only_result(monkeypatch):
     captured = {}
 
     class DummyLightRAGRetriever:
@@ -202,23 +243,6 @@ def test_handle_chat_enriches_lightrag_answer_level_sources_from_chroma(monkeypa
                         "source_type": "lightrag",
                         "source_id": "answer",
                         "title": "LightRAG answer",
-                    },
-                }
-            ]
-
-    class DummyChromaRetriever:
-        def query(self, text: str, top_k: int = 6):
-            captured["source_trace_query"] = text
-            captured["source_trace_top_k"] = top_k
-            return [
-                {
-                    "document": "Unopened items support seven-day no-reason return.",
-                    "metadata": {
-                        "source_type": "kb",
-                        "source_id": "kb-2-0",
-                        "title": "return policy",
-                        "document_id": 2,
-                        "chunk_id": 201,
                     },
                 }
             ]
@@ -239,7 +263,6 @@ def test_handle_chat_enriches_lightrag_answer_level_sources_from_chroma(monkeypa
     )
     monkeypatch.setattr(chat_api, "is_product_query", lambda _: False)
     monkeypatch.setattr(chat_api, "get_knowledge_retriever", lambda: DummyLightRAGRetriever())
-    monkeypatch.setattr(chat_api, "get_chroma_retriever", lambda: DummyChromaRetriever())
     monkeypatch.setattr(chat_api, "get_neo4j_retriever", lambda: DummyNeo4jRetriever())
     monkeypatch.setattr(chat_api, "get_llm_client", lambda: DummyLlmClient())
     monkeypatch.setattr(chat_api, "build_customer_service_prompt", lambda **kwargs: kwargs["retrieved_context"])
@@ -248,13 +271,40 @@ def test_handle_chat_enriches_lightrag_answer_level_sources_from_chroma(monkeypa
     response = chat_api.handle_chat(ChatRequest(message="return policy", conversationId="c-lr-answer"))
 
     assert captured["knowledge_query"] == "return policy"
-    assert captured["source_trace_query"] == "return policy"
-    assert captured["source_trace_top_k"] == 3
     assert "LightRAG summarized answer" in captured["prompt"]
-    assert [item.model_dump() for item in response.hitLogs] == [{"documentId": 2, "chunkId": 201}]
+    assert [item.model_dump() for item in response.hitLogs] == []
     assert [(item.sourceType, item.sourceId, item.title) for item in response.citations] == [
-        ("kb", "kb-2-0", "return policy")
+        ("lightrag", "answer", "LightRAG answer")
     ]
+
+
+def test_handle_chat_returns_friendly_message_when_knowledge_retrieval_is_unavailable(monkeypatch):
+    class FailingRetriever:
+        def query(self, text: str, top_k: int = 6):
+            raise RuntimeError("LightRAG request failed for /query: [WinError 10061] actively refused")
+
+    class DummyNeo4jRetriever:
+        def lookup_product_policy(self, text: str):
+            return []
+
+    monkeypatch.setattr(
+        chat_api,
+        "get_settings",
+        lambda: SimpleNamespace(ai_cs_max_message_length=800, ai_llm_api_key="test-key"),
+    )
+    monkeypatch.setattr(chat_api, "is_product_query", lambda _: False)
+    monkeypatch.setattr(chat_api, "get_knowledge_retriever", lambda: FailingRetriever())
+    monkeypatch.setattr(chat_api, "get_neo4j_retriever", lambda: DummyNeo4jRetriever())
+
+    response = chat_api.handle_chat(ChatRequest(message="退货规则是什么？"))
+
+    assert "知识库服务暂时不可用" in response.answer
+    assert "10061" not in response.answer
+    assert response.route == "after_sales"
+    assert response.sourceType == "knowledge"
+    assert response.citations == []
+    assert response.hitLogs == []
+    assert response.fallbackReason == "Knowledge retrieval is temporarily unavailable."
 
 
 def test_handle_chat_filters_stale_kb_versions_for_same_document(monkeypatch):
@@ -316,6 +366,81 @@ def test_handle_chat_filters_stale_kb_versions_for_same_document(monkeypatch):
     assert response.citations[0].sourceId == "kb:5:2:4"
 
 
+def test_rerank_chunks_for_message_prefers_matching_policy_category():
+    chunks = [
+        {
+            "document": "待支付订单和已取消订单不能申请售后。",
+            "metadata": {
+                "source_type": "kb",
+                "source_id": "kb:5:3:9",
+                "title": "KB After Sales Policy",
+                "document_id": 5,
+                "chunk_id": 842,
+                "category": "after_sales",
+                "version": 3,
+            },
+        },
+        {
+            "document": "订单金额没有达到最低消费金额时不能使用优惠券。",
+            "metadata": {
+                "source_type": "kb",
+                "source_id": "kb:6:3:12",
+                "title": "KB Coupon Rules",
+                "document_id": 6,
+                "chunk_id": 912,
+                "category": "coupon",
+                "version": 3,
+            },
+        },
+    ]
+
+    ranked = chat_api.rerank_chunks_for_message("没达到金额的优惠券可以先用吗？", chunks, limit=6)
+
+    assert [item["metadata"]["source_id"] for item in ranked] == ["kb:6:3:12"]
+
+
+def test_rerank_chunks_for_message_drops_cross_category_results_when_no_matching_policy_category():
+    chunks = [
+        {
+            "document": "待支付订单和已取消订单不能申请售后。",
+            "metadata": {
+                "source_type": "kb",
+                "source_id": "kb:5:3:9",
+                "title": "KB After Sales Policy",
+                "document_id": 5,
+                "chunk_id": 842,
+                "category": "after_sales",
+                "version": 3,
+            },
+        }
+    ]
+
+    ranked = chat_api.rerank_chunks_for_message("没达到金额的优惠券可以先用吗？", chunks, limit=6)
+
+    assert ranked == []
+
+
+def test_rerank_chunks_for_message_keeps_generic_policy_when_no_exact_category():
+    chunks = [
+        {
+            "document": "质量问题退货的退回运费由平台承担。",
+            "metadata": {
+                "source_type": "kb",
+                "source_id": "kb:2:1:0",
+                "title": "Return policy",
+                "document_id": 2,
+                "chunk_id": 2,
+                "category": "policy",
+                "version": 1,
+            },
+        }
+    ]
+
+    ranked = chat_api.rerank_chunks_for_message("售后质量问题退回运费谁承担？", chunks, limit=6)
+
+    assert [item["metadata"]["source_id"] for item in ranked] == ["kb:2:1:0"]
+
+
 def test_handle_chat_stream_skips_non_numeric_hit_log_ids(monkeypatch):
     class DummyLightRAGRetriever:
         def query(self, text: str, top_k: int = 6):
@@ -370,7 +495,36 @@ def test_handle_chat_stream_skips_non_numeric_hit_log_ids(monkeypatch):
     assert reply["hitLogs"] == [{"documentId": 11, "chunkId": 301}]
 
 
-def test_handle_chat_uses_realtime_product_tool_before_chroma(monkeypatch):
+def test_handle_chat_stream_returns_friendly_final_event_when_knowledge_retrieval_is_unavailable(monkeypatch):
+    class FailingRetriever:
+        def query(self, text: str, top_k: int = 6):
+            raise RuntimeError("LightRAG request failed for /query: [WinError 10061] actively refused")
+
+    class DummyNeo4jRetriever:
+        def lookup_product_policy(self, text: str):
+            return []
+
+    monkeypatch.setattr(
+        chat_api,
+        "get_settings",
+        lambda: SimpleNamespace(ai_cs_max_message_length=800, ai_llm_api_key="test-key"),
+    )
+    monkeypatch.setattr(chat_api, "is_product_query", lambda _: False)
+    monkeypatch.setattr(chat_api, "get_knowledge_retriever", lambda: FailingRetriever())
+    monkeypatch.setattr(chat_api, "get_neo4j_retriever", lambda: DummyNeo4jRetriever())
+
+    events = list(chat_api.handle_chat_stream(ChatRequest(message="退货规则是什么？", conversationId="c-kb-down")))
+    final_event = next(event for event in events if event["type"] == "final")
+    reply = final_event["reply"]
+
+    assert reply["route"] == "after_sales"
+    assert reply["sourceType"] == "knowledge"
+    assert "知识库服务暂时不可用" in reply["answer"]
+    assert "10061" not in reply["answer"]
+    assert reply["fallbackReason"] == "Knowledge retrieval is temporarily unavailable."
+
+
+def test_handle_chat_uses_realtime_product_tool_before_knowledge_retrieval(monkeypatch):
     captured = {}
 
     class DummyProductTool:
@@ -390,7 +544,7 @@ def test_handle_chat_uses_realtime_product_tool_before_chroma(monkeypatch):
 
     class FailingRetriever:
         def query(self, text: str, top_k: int = 6):
-            raise AssertionError("Chroma should not be queried when product tool returns products")
+            raise AssertionError("Knowledge retriever should not be queried when product tool returns products")
 
     class DummyNeo4jRetriever:
         def lookup_product_policy(self, text: str):
@@ -430,7 +584,7 @@ def test_product_disclaimer_is_not_duplicated_when_answer_already_mentions_order
     assert answer == "实际价格和库存请以您下单页面的实时显示为准。"
 
 
-def test_handle_chat_falls_back_to_chroma_when_product_tool_has_no_match(monkeypatch):
+def test_handle_chat_falls_back_to_knowledge_retrieval_when_product_tool_has_no_match(monkeypatch):
     captured = {}
 
     class EmptyProductTool:
@@ -440,7 +594,7 @@ def test_handle_chat_falls_back_to_chroma_when_product_tool_has_no_match(monkeyp
 
     class DummyRetriever:
         def query(self, text: str, top_k: int = 6):
-            captured["chroma_query"] = text
+            captured["knowledge_query"] = text
             return [
                 {
                     "document": "Seven-day return is supported",
@@ -477,7 +631,7 @@ def test_handle_chat_falls_back_to_chroma_when_product_tool_has_no_match(monkeyp
     response = chat_api.handle_chat(ChatRequest(message="不存在的耳机多少钱？"))
 
     assert captured["product_query"] == "不存在的耳机多少钱？"
-    assert captured["chroma_query"] == "不存在的耳机多少钱？"
+    assert captured["knowledge_query"] == "不存在的耳机多少钱？"
     assert response.answer == "Seven-day return is supported."
     assert [item.model_dump() for item in response.hitLogs] == [{"documentId": 1, "chunkId": 101}]
 
@@ -509,6 +663,49 @@ def test_handle_chat_returns_deterministic_no_match_for_plain_apple_price_query(
     assert response.sourceType == "product"
     assert response.confidence == 0.62
     assert response.citations == []
+
+
+def test_handle_chat_uses_product_tool_for_apple_15_price_query(monkeypatch):
+    captured = {}
+
+    class DummyProductTool:
+        def search(self, message: str):
+            captured["product_query"] = message
+            return [
+                {
+                    "id": 15,
+                    "name": "iPhone 15 128G",
+                    "price": 5199,
+                    "stock": 11,
+                }
+            ]
+
+    class DummyLlmClient:
+        def chat(self, prompt: str):
+            captured["prompt"] = prompt
+            return "iPhone 15 128G 当前售价 5199 元，库存 11 件。"
+
+    class FailingRetriever:
+        def query(self, text: str, top_k: int = 6):
+            raise AssertionError("Product route with realtime product hit should not query knowledge retriever")
+
+    monkeypatch.setattr(
+        chat_api,
+        "get_settings",
+        lambda: SimpleNamespace(ai_cs_max_message_length=800, ai_llm_api_key="test-key"),
+    )
+    monkeypatch.setattr(chat_api, "get_product_tool_client", lambda: DummyProductTool())
+    monkeypatch.setattr(chat_api, "get_llm_client", lambda: DummyLlmClient())
+    monkeypatch.setattr(chat_api, "get_knowledge_retriever", lambda: FailingRetriever())
+    monkeypatch.setattr(chat_api, "strip_think_tags", lambda text: text)
+
+    response = chat_api.handle_chat(ChatRequest(message="苹果15多少钱？"))
+
+    assert captured["product_query"] == "苹果15多少钱？"
+    assert "iPhone 15 128G" in captured["prompt"]
+    assert response.route == "product"
+    assert response.sourceType == "product"
+    assert response.citations[0].sourceId == "15"
 
 
 def test_handle_chat_prioritizes_after_sales_chunks_for_after_sales_question(monkeypatch):
@@ -566,9 +763,70 @@ def test_handle_chat_prioritizes_after_sales_chunks_for_after_sales_question(mon
     response = chat_api.handle_chat(ChatRequest(message="我收到商品就是坏的，退货运费是谁承担？"))
 
     assert captured["top_k"] >= 12
-    assert captured["prompt"].index("平台承担退回运费") < captured["prompt"].index("明确使用场景")
+    assert "平台承担退回运费" in captured["prompt"]
+    assert "明确使用场景" not in captured["prompt"]
     assert response.answer == "质量问题通过审核后，平台承担退回运费。"
     assert response.hitLogs[0].documentId == 5
+
+
+def test_handle_chat_uses_after_sales_shipping_chunk_for_quality_return_shipping_question(monkeypatch):
+    captured = {}
+
+    class DummyRetriever:
+        def query(self, text: str, top_k: int = 6):
+            return [
+                {
+                    "document": "优惠券不满足门槛时不可用。",
+                    "metadata": {
+                        "source_type": "kb",
+                        "source_id": "kb:6:3:12",
+                        "title": "Coupon Rules",
+                        "document_id": 6,
+                        "chunk_id": 912,
+                        "category": "coupon",
+                    },
+                },
+                {
+                    "document": "如果审核确认为商品质量问题，退货运费通常由商家承担；非质量问题需要按售后规则和审核结果处理。",
+                    "metadata": {
+                        "source_type": "kb",
+                        "source_id": "kb:5:3:22",
+                        "title": "KB After Sales Policy",
+                        "document_id": 5,
+                        "chunk_id": 855,
+                        "category": "after_sales",
+                    },
+                },
+            ]
+
+    class DummyNeo4jRetriever:
+        def lookup_product_policy(self, text: str):
+            return []
+
+    class DummyLlmClient:
+        def chat(self, prompt: str):
+            captured["prompt"] = prompt
+            return "质量问题通过审核后，退货运费通常由商家承担。"
+
+    monkeypatch.setattr(
+        chat_api,
+        "get_settings",
+        lambda: SimpleNamespace(ai_cs_max_message_length=800, ai_llm_api_key="test-key"),
+    )
+    monkeypatch.setattr(chat_api, "is_product_query", lambda _: False)
+    monkeypatch.setattr(chat_api, "get_knowledge_retriever", lambda: DummyRetriever())
+    monkeypatch.setattr(chat_api, "get_neo4j_retriever", lambda: DummyNeo4jRetriever())
+    monkeypatch.setattr(chat_api, "get_llm_client", lambda: DummyLlmClient())
+    monkeypatch.setattr(chat_api, "build_customer_service_prompt", lambda **kwargs: kwargs["retrieved_context"])
+    monkeypatch.setattr(chat_api, "strip_think_tags", lambda text: text)
+
+    response = chat_api.handle_chat(ChatRequest(message="售后质量问题退回运费谁承担？"))
+
+    assert "商品质量问题，退货运费通常由商家承担" in captured["prompt"]
+    assert "优惠券不满足门槛" not in captured["prompt"]
+    assert response.route == "after_sales"
+    assert response.hitLogs[0].documentId == 5
+    assert response.hitLogs[0].chunkId == 855
 
 
 def test_handle_chat_clarifies_memory_when_product_query_matches_multiple_versions(monkeypatch):
@@ -601,6 +859,68 @@ def test_handle_chat_clarifies_memory_when_product_query_matches_multiple_versio
     assert response.confidence == 0.72
     assert [item.sourceId for item in response.citations] == ["1", "2"]
     assert response.hitLogs == []
+
+
+def test_rerank_chunks_for_coupon_threshold_question_prefers_coupon_category():
+    chunks = [
+        {
+            "document": "物流异常时可在订单页点击催促派送。",
+            "metadata": {
+                "source_type": "kb",
+                "source_id": "kb:8:3:3",
+                "title": "KB Logistics",
+                "document_id": 8,
+                "chunk_id": 933,
+                "category": "logistics",
+            },
+        },
+        {
+            "document": "订单金额未达到优惠券最低门槛时，优惠券不能使用。",
+            "metadata": {
+                "source_type": "kb",
+                "source_id": "kb:6:3:12",
+                "title": "KB Coupon Rules",
+                "document_id": 6,
+                "chunk_id": 912,
+                "category": "coupon",
+            },
+        },
+    ]
+
+    ranked = chat_api.rerank_chunks_for_message("优惠券没到门槛为什么不能用？", chunks, limit=6)
+
+    assert [item["metadata"]["source_id"] for item in ranked] == ["kb:6:3:12"]
+
+
+def test_rerank_chunks_for_logistics_stuck_question_prefers_logistics_category():
+    chunks = [
+        {
+            "document": "订单金额未达到优惠券最低门槛时，优惠券不能使用。",
+            "metadata": {
+                "source_type": "kb",
+                "source_id": "kb:6:3:12",
+                "title": "KB Coupon Rules",
+                "document_id": 6,
+                "chunk_id": 912,
+                "category": "coupon",
+            },
+        },
+        {
+            "document": "物流信息长时间不更新时，可以先核对地址并联系在线客服催促派送。",
+            "metadata": {
+                "source_type": "kb",
+                "source_id": "kb:8:3:3",
+                "title": "KB Logistics",
+                "document_id": 8,
+                "chunk_id": 933,
+                "category": "logistics",
+            },
+        },
+    ]
+
+    ranked = chat_api.rerank_chunks_for_message("物流一直不动怎么办？", chunks, limit=6)
+
+    assert [item["metadata"]["source_id"] for item in ranked] == ["kb:8:3:3"]
 
 
 def test_handle_chat_uses_wallet_tool_with_auth_before_knowledge(monkeypatch):

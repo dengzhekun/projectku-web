@@ -1,6 +1,6 @@
 # AI Service Runbook
 
-This service uses Xunfei Coding Plan for the LLM and a local BGE embedding model for retrieval.
+This service uses Xunfei Coding Plan for the LLM and LightRAG as the production retrieval runtime.
 
 ## Local First Run
 
@@ -10,7 +10,7 @@ This service uses Xunfei Coding Plan for the LLM and a local BGE embedding model
    cd ai-service
    python -m pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
    ```
-3. Seed the local Chroma knowledge base:
+3. Seed demo knowledge-base content:
    ```powershell
    python app/ingest/sync_job.py
    ```
@@ -39,7 +39,7 @@ Backend persistence:
 
 - document metadata, chunks, index records, and hit logs: MySQL
 - uploaded source files: `back/storage/kb/<documentId>/`
-- vector data: `ai-service/data/chroma`
+- retrieval runtime storage: LightRAG-managed PostgreSQL/Neo4j (configured in `deploy/lightrag.env`)
 
 ## One Command Local Startup
 
@@ -67,7 +67,7 @@ set AI_EMBEDDING_MODEL=./data/models/bge-m3
 
 ## Production
 
-Production compose reads `deploy/ai-service.env` directly. The `ai-service-data` Docker volume persists Chroma data and embedding cache across container rebuilds.
+Production compose reads `deploy/ai-service.env` directly. The `ai-service-data` Docker volume persists embedding cache across container rebuilds.
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
@@ -80,12 +80,12 @@ For LightRAG embedding gateway mode, set:
 - `AI_EMBEDDING_GATEWAY_API_KEY=...` in `deploy/ai-service.env`
 - keep this value identical to `EMBEDDING_BINDING_API_KEY` in `deploy/lightrag.env`
 
-## Retrieval Mode Switch (Chroma / LightRAG)
+## Retrieval Runtime (LightRAG only)
 
 Set these variables in `deploy/ai-service.env` (or start from `deploy/ai-service.env.example`):
 
 ```bash
-KNOWLEDGE_RETRIEVER=chroma
+KNOWLEDGE_RETRIEVER=lightrag
 LIGHTRAG_BASE_URL=http://127.0.0.1:9621
 LIGHTRAG_API_KEY=
 LIGHTRAG_TIMEOUT_SECONDS=60
@@ -110,13 +110,49 @@ LightRAG runtime env file:
   - `EMBEDDING_BINDING_HOST=http://ai-service:9000/v1`
   - `EMBEDDING_USE_BASE64=false`
 
-Retriever modes:
+Runtime verification:
 
-- `chroma`: current stable behavior (default/safe)
-- `lightrag`: LightRAG-only mode, requires LightRAG Server healthy, no fallback path
-- `lightrag_with_chroma_fallback`: recommended trial mode while validating LightRAG availability
+1. Run `scripts/verify-lightrag-runtime.ps1`.
+2. Verify `ai-service` embedding gateway (`/v1/embeddings`) is healthy.
+3. If `AI_EMBEDDING_REMOTE_URL` uses local backend (`http://127.0.0.1:9001/embed`), verify port `9001` is healthy before query tests.
 
-Rollback:
+Important: LightRAG service endpoints may appear healthy even when embedding backend is unavailable. In that case indexing/query requests fail until embedding backend is restored.
 
-1. Set `KNOWLEDGE_RETRIEVER=chroma`
-2. Restart `ai-service`
+## Onsite AI Customer-Service Regression
+
+Run the onsite regression script after any of these changes:
+
+- LightRAG rebuild, runtime cutover, or KB reindex
+- customer-service routing or prompt changes
+- seed knowledge-base content changes for after-sales, coupon, or logistics rules
+- before a Windows portable package or GitHub release candidate is handed off
+
+Prerequisites:
+
+1. Backend is running and reachable at `http://127.0.0.1:8080/api` or an override URL.
+2. Backend can successfully proxy `POST /api/v1/customer-service/chat`.
+3. If you expect knowledge answers to pass, the active runtime already contains after-sales, coupon, and logistics knowledge.
+4. Do not paste API keys into the command line. The regression script does not print secrets.
+
+Default command from the repo root:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-ai-cs-regression.ps1
+```
+
+Override backend URL or timeout when needed:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-ai-cs-regression.ps1 `
+  -BackendBaseUrl "http://127.0.0.1:8080/api" `
+  -TimeoutSeconds 30
+```
+
+Behavior:
+
+- The script sends four built-in Chinese questions to backend `/v1/customer-service/chat`.
+- It prints `PASS` or `FAIL` for each case, then prints a final summary.
+- Exit code is `0` only when all cases pass; any failed case returns exit code `1`.
+- If product routing still works but one or more knowledge cases fail, treat that as a likely KB coverage or indexing problem first, not automatically an app code regression.
+
+Case details are documented in `docs/knowledge-base/ai-cs-regression-cases.md`.

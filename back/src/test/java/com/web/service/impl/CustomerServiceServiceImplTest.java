@@ -1,9 +1,12 @@
 package com.web.service.impl;
 
+import cn.hutool.jwt.JWT;
+import cn.hutool.jwt.signers.JWTSignerUtil;
 import com.web.dto.CustomerServiceChatRequest;
 import com.web.dto.CustomerServiceChatResponse;
 import com.web.dto.CustomerServiceHitLog;
 import com.web.exception.BusinessException;
+import com.web.security.AuthTokenService;
 import com.web.service.AiCustomerServiceClient;
 import com.web.service.KnowledgeBaseService;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +31,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CustomerServiceServiceImplTest {
 
+    private static final byte[] JWT_KEY = "projectku_secret_key".getBytes();
+
     @Mock
     private AiCustomerServiceClient aiCustomerServiceClient;
 
@@ -38,7 +43,10 @@ class CustomerServiceServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        customerServiceService = new CustomerServiceServiceImpl(aiCustomerServiceClient, knowledgeBaseService);
+        customerServiceService = new CustomerServiceServiceImpl(
+                aiCustomerServiceClient,
+                knowledgeBaseService,
+                new AuthTokenService());
     }
 
     @Test
@@ -62,7 +70,9 @@ class CustomerServiceServiceImplTest {
 
         when(aiCustomerServiceClient.chat(any(CustomerServiceChatRequest.class))).thenReturn(gatewayReply);
 
-        CustomerServiceChatResponse response = customerServiceService.chat("Request refund", "conversation-1", "Bearer token-123");
+        String token = "Bearer " + tokenFor(12L, "user@example.com");
+
+        CustomerServiceChatResponse response = customerServiceService.chat("Request refund", "conversation-1", token);
 
         assertEquals("Please check the order detail page first.", response.getAnswer());
         ArgumentCaptor<CustomerServiceChatRequest> requestCaptor =
@@ -70,7 +80,7 @@ class CustomerServiceServiceImplTest {
         verify(aiCustomerServiceClient).chat(requestCaptor.capture());
         assertEquals("Request refund", requestCaptor.getValue().getMessage());
         assertEquals("conversation-1", requestCaptor.getValue().getConversationId());
-        assertEquals("Bearer token-123", requestCaptor.getValue().getAuthToken());
+        assertEquals(token, requestCaptor.getValue().getAuthToken());
         verify(knowledgeBaseService).recordCustomerServiceLog(
                 "Request refund",
                 "conversation-1",
@@ -79,6 +89,16 @@ class CustomerServiceServiceImplTest {
                 null,
                 new BigDecimal("0.92"),
                 null);
+    }
+
+    @Test
+    void chatRejectsInvalidAuthTokenBeforeCallingAiGateway() {
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> customerServiceService.chat("我的订单到哪了", "conversation-auth", "Bearer fake-token"));
+
+        assertEquals("UNAUTHORIZED", exception.getCode());
+        verifyNoInteractions(aiCustomerServiceClient);
     }
 
     @Test
@@ -148,14 +168,25 @@ class CustomerServiceServiceImplTest {
     void streamChatNormalizesMessageAndDelegatesToAiGateway() throws Exception {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
-        customerServiceService.streamChat("  Request refund  ", "conversation-3", "Bearer stream-token", outputStream);
+        String token = "Bearer " + tokenFor(12L, "user@example.com");
+
+        customerServiceService.streamChat("  Request refund  ", "conversation-3", token, outputStream);
 
         ArgumentCaptor<CustomerServiceChatRequest> requestCaptor =
                 ArgumentCaptor.forClass(CustomerServiceChatRequest.class);
         verify(aiCustomerServiceClient).streamChat(requestCaptor.capture(), any());
         assertEquals("Request refund", requestCaptor.getValue().getMessage());
         assertEquals("conversation-3", requestCaptor.getValue().getConversationId());
-        assertEquals("Bearer stream-token", requestCaptor.getValue().getAuthToken());
+        assertEquals(token, requestCaptor.getValue().getAuthToken());
         verifyNoInteractions(knowledgeBaseService);
+    }
+
+    private String tokenFor(Long userId, String account) {
+        return JWT.create()
+                .setPayload("id", userId)
+                .setPayload("account", account)
+                .setPayload("exp", System.currentTimeMillis() + 7200 * 1000)
+                .setSigner(JWTSignerUtil.hs256(JWT_KEY))
+                .sign();
     }
 }

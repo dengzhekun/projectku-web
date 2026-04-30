@@ -4,6 +4,7 @@ import com.web.dto.CustomerServiceChatRequest;
 import com.web.dto.CustomerServiceChatResponse;
 import com.web.dto.CustomerServiceCitation;
 import com.web.exception.BusinessException;
+import com.web.security.AuthTokenService;
 import com.web.service.AiCustomerServiceClient;
 import com.web.service.CustomerServiceService;
 import com.web.service.KnowledgeBaseService;
@@ -21,12 +22,15 @@ public class CustomerServiceServiceImpl implements CustomerServiceService {
 
     private final AiCustomerServiceClient aiCustomerServiceClient;
     private final KnowledgeBaseService knowledgeBaseService;
+    private final AuthTokenService authTokenService;
 
     public CustomerServiceServiceImpl(
             AiCustomerServiceClient aiCustomerServiceClient,
-            KnowledgeBaseService knowledgeBaseService) {
+            KnowledgeBaseService knowledgeBaseService,
+            AuthTokenService authTokenService) {
         this.aiCustomerServiceClient = aiCustomerServiceClient;
         this.knowledgeBaseService = knowledgeBaseService;
+        this.authTokenService = authTokenService;
     }
 
     @Override
@@ -40,7 +44,7 @@ public class CustomerServiceServiceImpl implements CustomerServiceService {
         CustomerServiceChatRequest request = new CustomerServiceChatRequest();
         request.setMessage(normalizedMessage);
         request.setConversationId(conversationId);
-        request.setAuthToken(normalizeAuthToken(authToken));
+        request.setAuthToken(authTokenService.normalizeVerifiedBearerTokenOrNull(authToken));
         CustomerServiceChatResponse response = aiCustomerServiceClient.chat(request);
         recordCustomerServiceLog(normalizedMessage, conversationId, response);
         if (response != null && response.getHitLogs() != null && !response.getHitLogs().isEmpty()) {
@@ -95,7 +99,7 @@ public class CustomerServiceServiceImpl implements CustomerServiceService {
         CustomerServiceChatRequest request = new CustomerServiceChatRequest();
         request.setMessage(normalizedMessage);
         request.setConversationId(conversationId);
-        request.setAuthToken(normalizeAuthToken(authToken));
+        request.setAuthToken(authTokenService.normalizeVerifiedBearerTokenOrNull(authToken));
         aiCustomerServiceClient.streamChat(request, outputStream);
     }
 

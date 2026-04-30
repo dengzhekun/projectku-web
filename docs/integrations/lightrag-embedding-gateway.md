@@ -35,7 +35,8 @@ EMBEDDING_USE_BASE64=false
 ## Notes
 
 - `EMBEDDING_USE_BASE64=false` is required because the gateway returns float-vector lists.
-- Keep `KNOWLEDGE_RETRIEVER=chroma` as the default safe mode; switch retriever mode separately.
+- Production retriever mode is `KNOWLEDGE_RETRIEVER=lightrag`.
+- If embedding backend is unavailable, LightRAG docs/status can still appear healthy while real query/index requests fail.
 
 ## Smoke check script
 
@@ -66,3 +67,11 @@ python scripts/local_embedding_server.py
 ```
 
 It reads `deploy/ai-service.env`, serves `GET /health` and `POST /embed`, and uses the same `AI_EMBEDDING_REMOTE_API_KEY` expected by `ai-service`.
+
+Before production query tests, run:
+
+```powershell
+scripts/verify-lightrag-runtime.ps1
+```
+
+and confirm `http://127.0.0.1:9001/health` is reachable when local embedding backend is configured.

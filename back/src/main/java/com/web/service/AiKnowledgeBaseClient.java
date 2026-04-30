@@ -8,7 +8,9 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 public interface AiKnowledgeBaseClient {
-    IndexResult indexDocumentChunks(KbDocument document, List<KbChunk> chunks);
+    IndexResult indexDocumentChunks(KbDocument document, List<KbChunk> chunks, boolean recoverMapping);
+
+    void deleteDocument(Long documentId);
 
     class IndexResult {
         private final String embeddingProvider;
@@ -39,7 +41,12 @@ public interface AiKnowledgeBaseClient {
 @ConditionalOnMissingBean(AiKnowledgeBaseClient.class)
 class NoopAiKnowledgeBaseClient implements AiKnowledgeBaseClient {
     @Override
-    public IndexResult indexDocumentChunks(KbDocument document, List<KbChunk> chunks) {
+    public IndexResult indexDocumentChunks(KbDocument document, List<KbChunk> chunks, boolean recoverMapping) {
         return new IndexResult("noop", "noop", chunks == null ? 0 : chunks.size());
+    }
+
+    @Override
+    public void deleteDocument(Long documentId) {
+        // no-op
     }
 }

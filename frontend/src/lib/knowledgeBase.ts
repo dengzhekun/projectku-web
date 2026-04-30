@@ -80,6 +80,32 @@ export type KbBatchIndexItem = {
   error?: string | null
 }
 
+export type KbSyncHealthItem = {
+  id: number
+  title: string
+  category: string
+  status: string
+  version: number
+  chunkCount: number
+  latestIndexStatus?: string | null
+  latestIndexedChunkCount: number
+  latestIndexError?: string | null
+  needsSync: boolean
+}
+
+export type KbSyncHealth = {
+  totalDocuments: number
+  parsedDocuments: number
+  chunkedDocuments: number
+  indexedDocuments: number
+  failedDocuments: number
+  needsSyncDocuments: number
+  staleDocuments: number
+  missingChunkDocuments: number
+  latestFailedIndexDocuments: number
+  items: KbSyncHealthItem[]
+}
+
 export const fetchKbDocuments = async (params?: {
   category?: string
   status?: string
@@ -87,6 +113,11 @@ export const fetchKbDocuments = async (params?: {
 }) => {
   const res = await api.get<ApiEnvelope<KbDocument[]>>('/v1/kb/documents', { params })
   return res.data.data ?? []
+}
+
+export const fetchKbSyncHealth = async () => {
+  const res = await api.get<ApiEnvelope<KbSyncHealth>>('/v1/kb/documents/sync-health')
+  return res.data.data
 }
 
 export const fetchKbDocument = async (id: number) => {
@@ -128,14 +159,23 @@ export const fetchKbChunks = async (id: number) => {
   return res.data.data ?? []
 }
 
-export const indexKbDocument = async (id: number) => {
-  await api.post(`/v1/kb/documents/${id}/index`)
+export const indexKbDocument = async (id: number, params?: { recoverMapping?: boolean }) => {
+  const query: { recoverMapping?: boolean } = {}
+  if (params?.recoverMapping !== undefined) query.recoverMapping = params.recoverMapping
+  await api.post(`/v1/kb/documents/${id}/index`, null, { params: query })
 }
 
-export const batchIndexKbDocuments = async (params?: { allowLarge?: boolean; limit?: number }) => {
-  const query: { allowLarge?: boolean; limit?: number } = {}
+export const batchIndexKbDocuments = async (params?: {
+  allowLarge?: boolean
+  limit?: number
+  includeIndexed?: boolean
+  recoverMapping?: boolean
+}) => {
+  const query: { allowLarge?: boolean; limit?: number; includeIndexed?: boolean; recoverMapping?: boolean } = {}
   if (params?.allowLarge !== undefined) query.allowLarge = params.allowLarge
   if (params?.limit !== undefined) query.limit = params.limit
+  if (params?.includeIndexed !== undefined) query.includeIndexed = params.includeIndexed
+  if (params?.recoverMapping !== undefined) query.recoverMapping = params.recoverMapping
   const res = await api.post<ApiEnvelope<KbBatchIndexItem[]>>('/v1/kb/documents/batch-index', null, { params: query })
   return res.data.data ?? []
 }

@@ -108,6 +108,5 @@ jobs:
             tests/test_knowledge_retriever.py \
             tests/test_embedding_client.py \
             tests/test_neo4j_retriever.py \
-            tests/test_chroma_retriever.py \
             tests/test_indexing_api.py
         working-directory: ai-service

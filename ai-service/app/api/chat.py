@@ -23,9 +23,8 @@ from app.clients.product_tool_client import (
     is_product_query,
 )
 from app.config import get_settings
-from app.ingest.seed_documents import build_seed_records
 from app.prompts.customer_service_prompt import build_customer_service_prompt
-from app.retrieval.chroma_retriever import ChromaRetriever, merge_context
+from app.retrieval.context_formatter import merge_context
 from app.retrieval.knowledge_retriever import KnowledgeRetriever, build_knowledge_retriever
 from app.retrieval.neo4j_retriever import Neo4jRetriever, format_graph_context
 from app.safety.guardrails import strip_think_tags
@@ -40,20 +39,8 @@ def get_embedding_client() -> EmbeddingClient:
 
 
 @lru_cache(maxsize=1)
-def get_chroma_retriever() -> ChromaRetriever:
-    retriever = ChromaRetriever(get_settings(), get_embedding_client())
-    if retriever.collection.count() == 0:
-        retriever.upsert(build_seed_records())
-    return retriever
-
-
-@lru_cache(maxsize=1)
 def get_knowledge_retriever() -> KnowledgeRetriever:
-    retriever = build_knowledge_retriever(get_settings(), get_embedding_client())
-    collection = getattr(retriever, "collection", None)
-    if collection is not None and hasattr(collection, "count") and collection.count() == 0:
-        retriever.upsert(build_seed_records())
-    return retriever
+    return build_knowledge_retriever(get_settings(), get_embedding_client())
 
 
 @lru_cache(maxsize=1)
@@ -113,12 +100,17 @@ def build_hit_logs(chunks: list[dict]) -> list[HitLog]:
 
 def build_citations(chunks: list[dict]) -> list[Citation]:
     citations: list[Citation] = []
-    for chunk in chunks[:3]:
+    seen: set[tuple[str, str]] = set()
+    for chunk in chunks:
         metadata = chunk.get("metadata") or {}
         source_type = metadata.get("source_type")
         source_id = metadata.get("source_id")
         if source_type is None or source_id is None:
             continue
+        key = (str(source_type), str(source_id))
+        if key in seen:
+            continue
+        seen.add(key)
         citations.append(
             Citation(
                 sourceType=str(source_type),
@@ -126,6 +118,8 @@ def build_citations(chunks: list[dict]) -> list[Citation]:
                 title=metadata.get("title") or str(source_id),
             )
         )
+        if len(citations) >= 3:
+            break
     return citations
 
 
@@ -155,24 +149,8 @@ def filter_latest_kb_versions(chunks: list[dict]) -> list[dict]:
     return filtered
 
 
-def is_lightrag_answer_level_result(chunks: list[dict]) -> bool:
-    return any(
-        (chunk.get("metadata") or {}).get("source_type") == "lightrag"
-        and (chunk.get("metadata") or {}).get("source_id") == "answer"
-        for chunk in chunks
-    )
-
-
-def build_attribution_chunks(message: str, chunks: list[dict]) -> list[dict]:
-    if not chunks or build_hit_logs(chunks) or not is_lightrag_answer_level_result(chunks):
-        return chunks
-
-    try:
-        traced_chunks = get_chroma_retriever().query(message, top_k=3)
-    except Exception:
-        return chunks
-
-    return traced_chunks if build_hit_logs(traced_chunks) else chunks
+def build_attribution_chunks(chunks: list[dict]) -> list[dict]:
+    return chunks
 
 
 def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
@@ -223,7 +201,7 @@ def classify_customer_service_route(message: str) -> str:
     if is_order_state_query(message):
         return "order"
     if is_aftersales_state_query(message):
-        return "aftersales"
+        return "after_sales"
     if is_product_query(message):
         return "product"
     return infer_policy_category(message) or "knowledge"
@@ -251,8 +229,27 @@ def score_chunk_for_message(message: str, chunk: dict) -> int:
 
 def rerank_chunks_for_message(message: str, chunks: list[dict], limit: int = 6) -> list[dict]:
     chunks = filter_latest_kb_versions(chunks)
-    if infer_policy_category(message) is None:
+    desired_category = infer_policy_category(message)
+    if desired_category is None:
         return chunks[:limit]
+    category_matched = [
+        chunk
+        for chunk in chunks
+        if (chunk.get("metadata") or {}).get("category") == desired_category
+    ]
+    if category_matched:
+        chunks = category_matched
+    else:
+        generic_chunks = [
+            chunk
+            for chunk in chunks
+            if ((chunk.get("metadata") or {}).get("category") or "").strip().lower()
+            in ("", "faq", "policy", "general")
+        ]
+        if generic_chunks:
+            chunks = generic_chunks
+        else:
+            return []
     indexed = list(enumerate(chunks))
     indexed.sort(key=lambda item: (-score_chunk_for_message(message, item[1]), item[0]))
     return [chunk for _, chunk in indexed[:limit]]
@@ -359,6 +356,22 @@ def business_tool_unavailable_response(route: str) -> ChatResponse:
     )
 
 
+def knowledge_retrieval_unavailable_response(route: str) -> ChatResponse:
+    answer = "知识库服务暂时不可用，请稍后再试。"
+    if route == "product":
+        answer = "我暂时没有查到实时商品匹配结果，而且知识库服务当前不可用。请稍后再试，或补充更具体的商品名和规格。"
+    return ChatResponse(
+        answer=answer,
+        confidence=0.25,
+        route=route,
+        sourceType="knowledge",
+        citations=[],
+        actions=[],
+        hitLogs=[],
+        fallbackReason="Knowledge retrieval is temporarily unavailable.",
+    )
+
+
 def build_business_prompt_response(message: str, facts: str, route: str, citations: list[Citation]) -> ChatResponse:
     settings = get_settings()
     if not settings.ai_llm_api_key or settings.ai_llm_api_key.startswith("replace_"):
@@ -442,9 +455,13 @@ def build_business_stream_response(message: str, facts: str, route: str, citatio
 def build_business_tool_context(request: ChatRequest, route: str) -> tuple[str, list[Citation]] | None:
     auth_token = request.authToken
     message = request.message.strip()
-    if route not in ("wallet", "order", "coupon", "aftersales"):
+    if route == "aftersales":
+        route = "after_sales"
+    if route not in ("wallet", "order", "coupon", "after_sales"):
         return None
-    if route in ("wallet", "order", "aftersales") and not auth_token:
+    if route == "after_sales" and not is_aftersales_state_query(message):
+        return None
+    if route in ("wallet", "order", "after_sales") and not auth_token:
         raise PermissionError("login required")
     if route == "coupon" and not auth_token:
         if has_account_owner_signal(message) or extract_coupon_code(message):
@@ -563,7 +580,10 @@ def handle_chat(request: ChatRequest) -> ChatResponse:
             fallbackReason=None,
         )
 
-    chunks = rerank_chunks_for_message(message, get_knowledge_retriever().query(message, top_k=20), limit=6)
+    try:
+        chunks = rerank_chunks_for_message(message, get_knowledge_retriever().query(message, top_k=20), limit=6)
+    except Exception:
+        return knowledge_retrieval_unavailable_response(route)
     graph_rows = get_neo4j_retriever().lookup_product_policy(message)
 
     retrieved_context = merge_context(chunks)
@@ -576,7 +596,7 @@ def handle_chat(request: ChatRequest) -> ChatResponse:
     )
 
     fallback_reason = None if chunks else "No matching knowledge was found. The answer uses generic rules only."
-    attribution_chunks = build_attribution_chunks(message, chunks)
+    attribution_chunks = build_attribution_chunks(chunks)
     citations = build_citations(attribution_chunks)
     hit_logs = build_hit_logs(attribution_chunks)
 
@@ -713,7 +733,13 @@ def handle_chat_stream(request: ChatRequest):
         }
         return
 
-    chunks = rerank_chunks_for_message(message, get_knowledge_retriever().query(message, top_k=20), limit=6)
+    try:
+        chunks = rerank_chunks_for_message(message, get_knowledge_retriever().query(message, top_k=20), limit=6)
+    except Exception:
+        response = knowledge_retrieval_unavailable_response(route)
+        yield {"type": "delta", "text": response.answer}
+        yield {"type": "final", "reply": response.model_dump()}
+        return
     graph_rows = get_neo4j_retriever().lookup_product_policy(message)
 
     retrieved_context = merge_context(chunks)
@@ -726,7 +752,7 @@ def handle_chat_stream(request: ChatRequest):
     )
 
     fallback_reason = None if chunks else "No matching knowledge was found. The answer uses generic rules only."
-    attribution_chunks = build_attribution_chunks(message, chunks)
+    attribution_chunks = build_attribution_chunks(chunks)
     citations = build_citations(attribution_chunks)
     hit_logs = build_hit_logs(attribution_chunks)
 

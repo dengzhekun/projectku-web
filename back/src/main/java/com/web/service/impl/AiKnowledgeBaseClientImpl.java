@@ -29,13 +29,14 @@ public class AiKnowledgeBaseClientImpl implements AiKnowledgeBaseClient {
     }
 
     @Override
-    public IndexResult indexDocumentChunks(KbDocument document, List<KbChunk> chunks) {
+    public IndexResult indexDocumentChunks(KbDocument document, List<KbChunk> chunks, boolean recoverMapping) {
         String url = properties.getBaseUrl().replaceAll("/+$", "") + "/internal/index";
         IndexRequest request = new IndexRequest();
         request.setDocumentId(document.getId());
         request.setVersion(document.getVersion());
         request.setTitle(document.getTitle());
         request.setCategory(document.getCategory());
+        request.setRecoverMapping(recoverMapping);
         request.setChunks(chunks.stream()
                 .map(chunk -> new IndexChunk(chunk.getId(), chunk.getChunkIndex(), chunk.getContent(), chunk.getCharCount()))
                 .collect(Collectors.toList()));
@@ -57,6 +58,20 @@ public class AiKnowledgeBaseClientImpl implements AiKnowledgeBaseClient {
         }
     }
 
+    @Override
+    public void deleteDocument(Long documentId) {
+        String url = properties.getBaseUrl().replaceAll("/+$", "") + "/internal/delete";
+        DeleteRequest request = new DeleteRequest();
+        request.setDocumentId(documentId);
+        try {
+            restTemplate.postForEntity(url, request, Void.class);
+        } catch (RestClientException e) {
+            throw new BusinessException("AI_SERVICE_UNAVAILABLE", "Failed to call delete service");
+        } catch (Exception e) {
+            throw new BusinessException("AI_SERVICE_UNAVAILABLE", "Invalid delete service response");
+        }
+    }
+
     private String coalesce(String value, String fallback) {
         return value == null || value.trim().isEmpty() ? fallback : value;
     }
@@ -66,6 +81,7 @@ public class AiKnowledgeBaseClientImpl implements AiKnowledgeBaseClient {
         private Integer version;
         private String title;
         private String category;
+        private Boolean recoverMapping;
         private List<IndexChunk> chunks;
 
         public Long getDocumentId() {
@@ -98,6 +114,14 @@ public class AiKnowledgeBaseClientImpl implements AiKnowledgeBaseClient {
 
         public void setCategory(String category) {
             this.category = category;
+        }
+
+        public Boolean getRecoverMapping() {
+            return recoverMapping;
+        }
+
+        public void setRecoverMapping(Boolean recoverMapping) {
+            this.recoverMapping = recoverMapping;
         }
 
         public List<IndexChunk> getChunks() {
@@ -175,6 +199,18 @@ public class AiKnowledgeBaseClientImpl implements AiKnowledgeBaseClient {
 
         public void setVectorCollection(String vectorCollection) {
             this.vectorCollection = vectorCollection;
+        }
+    }
+
+    private static class DeleteRequest {
+        private Long documentId;
+
+        public Long getDocumentId() {
+            return documentId;
+        }
+
+        public void setDocumentId(Long documentId) {
+            this.documentId = documentId;
         }
     }
 }

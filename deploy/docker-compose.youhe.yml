@@ -37,7 +37,7 @@ services:
       AI_SERVICE_BASE_URL: http://host.docker.internal:19000
       AI_SERVICE_TIMEOUT_SECONDS: "120"
       AI_EMBEDDING_PROVIDER: remote_http
-      CHROMA_COLLECTION: ecommerce_kb_v1_bge_m3_remote
+      LIGHTRAG_COLLECTION: ecommerce_kb_v1_bge_m3_remote
       KB_STORAGE_ROOT: /app/storage/kb
     extra_hosts:
       - "host.docker.internal:172.21.0.1"

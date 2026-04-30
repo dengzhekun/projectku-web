@@ -2,7 +2,9 @@ package com.web.service.impl;
 
 import com.web.exception.BusinessException;
 import com.web.mapper.CartItemMapper;
+import com.web.mapper.ProductMapper;
 import com.web.pojo.CartItem;
+import com.web.pojo.ProductSku;
 import com.web.service.CartService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -16,6 +18,9 @@ public class CartServiceImpl implements CartService {
     @Autowired
     private CartItemMapper cartItemMapper;
 
+    @Autowired
+    private ProductMapper productMapper;
+
     @Override
     public List<CartItem> getCartList(Long userId) {
         return cartItemMapper.getListByUserId(userId);
@@ -25,6 +30,7 @@ public class CartServiceImpl implements CartService {
     @Transactional(rollbackFor = Exception.class)
     public boolean addCartItem(Long userId, Long productId, Long skuId, Integer quantity) {
         validateQuantity(quantity);
+        validateSkuBelongsToProduct(productId, skuId);
         CartItem existing = cartItemMapper.getByUserIdAndProductId(userId, productId, skuId);
         if (existing != null) {
             existing.setQuantity(existing.getQuantity() + quantity);
@@ -66,6 +72,16 @@ public class CartServiceImpl implements CartService {
     private void validateQuantity(Integer quantity) {
         if (quantity == null || quantity <= 0) {
             throw new BusinessException("VALIDATION_FAILED", "商品数量必须大于 0");
+        }
+    }
+
+    private void validateSkuBelongsToProduct(Long productId, Long skuId) {
+        if (skuId == null) {
+            return;
+        }
+        ProductSku sku = productMapper.getSkuById(skuId);
+        if (sku == null || productId == null || !productId.equals(sku.getProductId())) {
+            throw new BusinessException("SKU_INVALID", "商品规格不属于当前商品");
         }
     }
 }

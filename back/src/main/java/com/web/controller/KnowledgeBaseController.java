@@ -98,16 +98,24 @@ public class KnowledgeBaseController {
     }
 
     @PostMapping("/{id}/index")
-    public ResponseEntity<Map<String, Object>> index(@PathVariable Long id) {
-        knowledgeBaseService.indexDocument(id);
+    public ResponseEntity<Map<String, Object>> index(
+            @PathVariable Long id,
+            @RequestParam(required = false) Boolean recoverMapping) {
+        knowledgeBaseService.indexDocument(id, recoverMapping);
         return ResponseEntity.ok(success(null));
     }
 
     @PostMapping("/batch-index")
     public ResponseEntity<Map<String, Object>> batchIndex(
             @RequestParam(required = false) Boolean allowLarge,
-            @RequestParam(required = false) Integer limit) {
-        return ResponseEntity.ok(success(knowledgeBaseService.batchIndexDocuments(allowLarge, limit)));
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Boolean includeIndexed,
+            @RequestParam(required = false) Boolean recoverMapping) {
+        return ResponseEntity.ok(success(knowledgeBaseService.batchIndexDocuments(
+                allowLarge,
+                limit,
+                includeIndexed,
+                recoverMapping)));
     }
 
     @GetMapping("/{id}/index-records")
@@ -118,6 +126,11 @@ public class KnowledgeBaseController {
     @GetMapping("/{id}/hits")
     public ResponseEntity<Map<String, Object>> hits(@PathVariable Long id) {
         return ResponseEntity.ok(success(knowledgeBaseService.getHitLogs(id)));
+    }
+
+    @GetMapping("/sync-health")
+    public ResponseEntity<Map<String, Object>> syncHealth() {
+        return ResponseEntity.ok(success(knowledgeBaseService.getSyncHealth()));
     }
 
     private Map<String, Object> success(Object data) {

@@ -70,9 +70,10 @@ class AiServiceClientEncodingTest {
         document.setVersion(1);
         KbChunk chunk = new KbChunk(11L, 5L, 0, "质量问题通过审核后，平台承担退回运费。", 21, "active", null);
 
-        client.indexDocumentChunks(document, List.of(chunk));
+        client.indexDocumentChunks(document, List.of(chunk), true);
 
         assertTrue(body.get().contains("平台承担退回运费"), body.get());
+        assertTrue(body.get().contains("\"recoverMapping\":true"), body.get());
     }
 
     private AiServiceProperties properties() {

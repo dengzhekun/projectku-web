@@ -52,6 +52,7 @@ class IndexRequest(BaseModel):
     version: int
     title: Optional[str] = None
     category: Optional[str] = None
+    recoverMapping: bool = False
     chunks: list[IndexChunk] = Field(default_factory=list)
 
 
@@ -60,3 +61,11 @@ class IndexResponse(BaseModel):
     indexedChunkCount: int
     embeddingProvider: str
     vectorCollection: str
+
+
+class DeleteDocumentRequest(BaseModel):
+    documentId: int
+
+
+class DeleteDocumentResponse(BaseModel):
+    documentId: int

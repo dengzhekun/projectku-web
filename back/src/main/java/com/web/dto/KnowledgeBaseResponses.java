@@ -502,4 +502,190 @@ public class KnowledgeBaseResponses {
             this.createdAt = createdAt;
         }
     }
+
+    public static class SyncHealthResponse {
+        private Integer totalDocuments;
+        private Integer parsedDocuments;
+        private Integer chunkedDocuments;
+        private Integer indexedDocuments;
+        private Integer failedDocuments;
+        private Integer needsSyncDocuments;
+        private Integer staleDocuments;
+        private Integer missingChunkDocuments;
+        private Integer latestFailedIndexDocuments;
+        private java.util.List<SyncHealthItemResponse> items;
+
+        public Integer getTotalDocuments() {
+            return totalDocuments;
+        }
+
+        public void setTotalDocuments(Integer totalDocuments) {
+            this.totalDocuments = totalDocuments;
+        }
+
+        public Integer getParsedDocuments() {
+            return parsedDocuments;
+        }
+
+        public void setParsedDocuments(Integer parsedDocuments) {
+            this.parsedDocuments = parsedDocuments;
+        }
+
+        public Integer getChunkedDocuments() {
+            return chunkedDocuments;
+        }
+
+        public void setChunkedDocuments(Integer chunkedDocuments) {
+            this.chunkedDocuments = chunkedDocuments;
+        }
+
+        public Integer getIndexedDocuments() {
+            return indexedDocuments;
+        }
+
+        public void setIndexedDocuments(Integer indexedDocuments) {
+            this.indexedDocuments = indexedDocuments;
+        }
+
+        public Integer getFailedDocuments() {
+            return failedDocuments;
+        }
+
+        public void setFailedDocuments(Integer failedDocuments) {
+            this.failedDocuments = failedDocuments;
+        }
+
+        public Integer getNeedsSyncDocuments() {
+            return needsSyncDocuments;
+        }
+
+        public void setNeedsSyncDocuments(Integer needsSyncDocuments) {
+            this.needsSyncDocuments = needsSyncDocuments;
+        }
+
+        public Integer getStaleDocuments() {
+            return staleDocuments;
+        }
+
+        public void setStaleDocuments(Integer staleDocuments) {
+            this.staleDocuments = staleDocuments;
+        }
+
+        public Integer getMissingChunkDocuments() {
+            return missingChunkDocuments;
+        }
+
+        public void setMissingChunkDocuments(Integer missingChunkDocuments) {
+            this.missingChunkDocuments = missingChunkDocuments;
+        }
+
+        public Integer getLatestFailedIndexDocuments() {
+            return latestFailedIndexDocuments;
+        }
+
+        public void setLatestFailedIndexDocuments(Integer latestFailedIndexDocuments) {
+            this.latestFailedIndexDocuments = latestFailedIndexDocuments;
+        }
+
+        public java.util.List<SyncHealthItemResponse> getItems() {
+            return items;
+        }
+
+        public void setItems(java.util.List<SyncHealthItemResponse> items) {
+            this.items = items;
+        }
+    }
+
+    public static class SyncHealthItemResponse {
+        private Long id;
+        private String title;
+        private String category;
+        private String status;
+        private Integer version;
+        private Integer chunkCount;
+        private String latestIndexStatus;
+        private Integer latestIndexedChunkCount;
+        private String latestIndexError;
+        private Boolean needsSync;
+
+        public Long getId() {
+            return id;
+        }
+
+        public void setId(Long id) {
+            this.id = id;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public void setTitle(String title) {
+            this.title = title;
+        }
+
+        public String getCategory() {
+            return category;
+        }
+
+        public void setCategory(String category) {
+            this.category = category;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public void setStatus(String status) {
+            this.status = status;
+        }
+
+        public Integer getVersion() {
+            return version;
+        }
+
+        public void setVersion(Integer version) {
+            this.version = version;
+        }
+
+        public Integer getChunkCount() {
+            return chunkCount;
+        }
+
+        public void setChunkCount(Integer chunkCount) {
+            this.chunkCount = chunkCount;
+        }
+
+        public String getLatestIndexStatus() {
+            return latestIndexStatus;
+        }
+
+        public void setLatestIndexStatus(String latestIndexStatus) {
+            this.latestIndexStatus = latestIndexStatus;
+        }
+
+        public Integer getLatestIndexedChunkCount() {
+            return latestIndexedChunkCount;
+        }
+
+        public void setLatestIndexedChunkCount(Integer latestIndexedChunkCount) {
+            this.latestIndexedChunkCount = latestIndexedChunkCount;
+        }
+
+        public String getLatestIndexError() {
+            return latestIndexError;
+        }
+
+        public void setLatestIndexError(String latestIndexError) {
+            this.latestIndexError = latestIndexError;
+        }
+
+        public Boolean getNeedsSync() {
+            return needsSync;
+        }
+
+        public void setNeedsSync(Boolean needsSync) {
+            this.needsSync = needsSync;
+        }
+    }
 }

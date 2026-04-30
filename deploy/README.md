@@ -35,6 +35,9 @@ vi deploy/lightrag.env
 - `AI_LLM_API_KEY`
 - `AI_EMBEDDING_REMOTE_URL` / `AI_EMBEDDING_REMOTE_API_KEY` if embeddings are remote
 - `AI_EMBEDDING_GATEWAY_API_KEY` if the internal embedding gateway is enabled
+- `LIGHTRAG_BASE_URL`
+- `LIGHTRAG_COLLECTION` if you need a non-default knowledge collection name
+- `LIGHTRAG_DOC_REGISTRY_PATH` if you want the document-id registry outside the default `./data` path
 
 ### `deploy/lightrag.env`
 
@@ -80,3 +83,11 @@ More operator notes:
 
 - `docs/deployment.md`
 - `docs/deployment-faq.md`
+
+## Pure LightRAG Runtime
+
+- `KNOWLEDGE_RETRIEVER=lightrag` is the default production mode.
+- AI customer service KB retrieval, reindex, and delete now rely on LightRAG only.
+- Backend KB document deletion calls ai-service `/internal/delete` before local DB/file cleanup.
+- `LIGHTRAG_DOC_REGISTRY_PATH` stores the mapping from business `documentId` to LightRAG `doc_ids` so reindex and delete remain consistent.
+- Chroma and `lightrag_with_chroma_fallback` were migration-era modes and are no longer part of the production runtime or rollback path.

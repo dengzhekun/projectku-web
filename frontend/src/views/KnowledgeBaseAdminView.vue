@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import CustomerServiceLogs from '../components/kb/CustomerServiceLogs.vue'
@@ -25,6 +25,7 @@ import {
   fetchKbHitLogs,
   fetchKbIndexRecords,
   fetchKbMissLogs,
+  fetchKbSyncHealth,
   indexKbDocument,
   type CustomerServiceLog,
   type KbBatchIndexItem,
@@ -33,6 +34,8 @@ import {
   type KbHitLog,
   type KbIndexRecord,
   type KbMissLog,
+  type KbSyncHealth,
+  type KbSyncHealthItem,
   updateKbDocument,
   uploadKbDocument,
 } from '../lib/knowledgeBase'
@@ -49,10 +52,13 @@ const actionId = ref<number | null>(null)
 const loadError = ref('')
 const batchSyncing = ref(false)
 const batchAllowLarge = ref(false)
+const batchIncludeIndexed = ref(false)
+const batchRecoverMapping = ref(false)
 const batchLimitText = ref('')
 const batchSummary = ref('')
 const missesLoading = ref(false)
 const csLogsLoading = ref(false)
+const syncHealthLoading = ref(false)
 const missStatus = ref('open')
 const missKeyword = ref('')
 const csLogRoute = ref('')
@@ -73,6 +79,7 @@ const records = ref<KbIndexRecord[]>([])
 const hits = ref<KbHitLog[]>([])
 const misses = ref<KbMissLog[]>([])
 const customerServiceLogs = ref<CustomerServiceLog[]>([])
+const syncHealth = ref<KbSyncHealth | null>(null)
 
 const editForm = reactive({
   title: '',
@@ -162,12 +169,28 @@ const loadCustomerServiceLogs = async () => {
   }
 }
 
+const loadSyncHealth = async () => {
+  syncHealthLoading.value = true
+  try {
+    syncHealth.value = await fetchKbSyncHealth()
+  } catch (error: any) {
+    toast.push({ type: 'error', message: error?.message || '加载同步健康失败' })
+  } finally {
+    syncHealthLoading.value = false
+  }
+}
+
+const refreshDocumentsAndHealth = async (preferredId?: number | null) => {
+  await loadDocuments(preferredId)
+  await loadSyncHealth()
+}
+
 const handleCreateManual = async (payload: { title: string; category: string; contentText: string }) => {
   saving.value = true
   try {
     const created = await createKbDocument(payload)
     toast.push({ type: 'success', message: '文档已创建' })
-    await loadDocuments(created.id)
+    await refreshDocumentsAndHealth(created.id)
   } catch (error: any) {
     toast.push({ type: 'error', message: error?.message || '创建失败' })
   } finally {
@@ -180,7 +203,7 @@ const handleUpload = async (payload: { title: string; category: string; file: Fi
   try {
     const created = await uploadKbDocument(payload)
     toast.push({ type: 'success', message: '文档已上传并解析' })
-    await loadDocuments(created.id)
+    await refreshDocumentsAndHealth(created.id)
   } catch (error: any) {
     toast.push({ type: 'error', message: error?.message || '上传失败' })
   } finally {
@@ -198,7 +221,7 @@ const handleSaveDocument = async () => {
       contentText: editForm.contentText,
     })
     toast.push({ type: 'success', message: '文档已更新' })
-    await loadDocuments(selectedId.value)
+    await refreshDocumentsAndHealth(selectedId.value)
   } catch (error: any) {
     toast.push({ type: 'error', message: error?.message || '更新失败' })
   } finally {
@@ -211,7 +234,7 @@ const runAction = async (id: number, task: () => Promise<void>, successText: str
   try {
     await task()
     toast.push({ type: 'success', message: successText })
-    await loadDocuments(id)
+    await refreshDocumentsAndHealth(id)
   } catch (error: any) {
     toast.push({ type: 'error', message: error?.message || '操作失败' })
   } finally {
@@ -225,7 +248,7 @@ const handleDelete = async (id: number) => {
   try {
     await deleteKbDocument(id)
     toast.push({ type: 'success', message: '文档已删除' })
-    await loadDocuments(selectedId.value === id ? null : selectedId.value)
+    await refreshDocumentsAndHealth(selectedId.value === id ? null : selectedId.value)
   } catch (error: any) {
     toast.push({ type: 'error', message: error?.message || '删除失败' })
   } finally {
@@ -249,6 +272,40 @@ const summarizeBatchResult = (items: KbBatchIndexItem[]) => {
   return `总数 ${items.length}，成功 ${success}，跳过 ${skipped}，失败 ${failed}`
 }
 
+const batchHint = computed(() => {
+  const notes = ['默认只同步当前 chunked 文档']
+  if (batchIncludeIndexed.value) {
+    notes.push('会额外包含已索引文档')
+  }
+  if (batchRecoverMapping.value) {
+    notes.push('会显式请求恢复旧映射')
+  }
+  if (batchAllowLarge.value) {
+    notes.push('会放开超大文档阈值')
+  }
+  return notes.join('，')
+})
+
+const syncHealthItemsById = computed<Record<number, KbSyncHealthItem>>(() => {
+  const entries = (syncHealth.value?.items ?? []).map((item) => [item.id, item] as const)
+  return Object.fromEntries(entries)
+})
+
+const healthSummaryCards = computed(() => {
+  const health = syncHealth.value
+  return [
+    { label: '总文档', value: health?.totalDocuments ?? '-' },
+    { label: '已索引', value: health?.indexedDocuments ?? '-' },
+    { label: '需同步', value: health?.needsSyncDocuments ?? '-' },
+    {
+      label: '失败 / 最新索引失败',
+      value: health ? `${health.failedDocuments} / ${health.latestFailedIndexDocuments}` : '-',
+    },
+  ]
+})
+
+const getSyncHealthItem = (documentId: number) => syncHealthItemsById.value[documentId]
+
 const handleBatchSync = async () => {
   const limit = parseLimit(batchLimitText.value)
   if (limit === null) {
@@ -260,11 +317,13 @@ const handleBatchSync = async () => {
     const result = await batchIndexKbDocuments({
       allowLarge: batchAllowLarge.value ? true : undefined,
       limit,
+      includeIndexed: batchIncludeIndexed.value ? true : undefined,
+      recoverMapping: batchRecoverMapping.value ? true : undefined,
     })
     const summary = summarizeBatchResult(result)
     batchSummary.value = `最近批量同步：${summary}`
     toast.push({ type: 'success', message: `批量同步完成：${summary}` })
-    await loadDocuments(selectedId.value)
+    await refreshDocumentsAndHealth(selectedId.value)
   } catch (error: any) {
     toast.push({ type: 'error', message: error?.message || '批量同步失败' })
   } finally {
@@ -284,8 +343,19 @@ const handleAdminLogout = async () => {
   await router.replace({ name: 'adminLogin' })
 }
 
+const handleFilterSearch = () => {
+  refreshDocumentsAndHealth(selectedId.value)
+}
+
+const handleFilterReset = () => {
+  filters.category = ''
+  filters.status = ''
+  filters.keyword = ''
+  refreshDocumentsAndHealth(selectedId.value)
+}
+
 onMounted(() => {
-  loadDocuments()
+  loadDocuments().then(loadSyncHealth)
   loadMisses()
   loadCustomerServiceLogs()
 })
@@ -307,17 +377,26 @@ onMounted(() => {
           <UiInput v-model="filters.keyword" placeholder="按标题或内容搜索" />
         </div>
         <div class="actions">
-          <UiButton variant="primary" :loading="loading" @click="loadDocuments(selectedId)">查询</UiButton>
-          <UiButton @click="filters.category = ''; filters.status = ''; filters.keyword = ''; loadDocuments(selectedId)">重置</UiButton>
+          <UiButton variant="primary" :loading="loading" @click="handleFilterSearch">查询</UiButton>
+          <UiButton @click="handleFilterReset">重置</UiButton>
         </div>
       </section>
 
       <section class="panel batch-panel">
         <div class="batch-controls">
           <UiButton size="sm" variant="primary" :loading="batchSyncing" @click="handleBatchSync">批量同步到 LightRAG</UiButton>
+          <UiButton size="sm" :loading="syncHealthLoading" @click="loadSyncHealth">刷新健康</UiButton>
           <label class="batch-check">
             <input v-model="batchAllowLarge" type="checkbox" :disabled="batchSyncing" />
             <span>允许超大文档</span>
+          </label>
+          <label class="batch-check">
+            <input v-model="batchIncludeIndexed" type="checkbox" :disabled="batchSyncing" />
+            <span>包含已索引文档</span>
+          </label>
+          <label class="batch-check">
+            <input v-model="batchRecoverMapping" type="checkbox" :disabled="batchSyncing" />
+            <span>强制恢复旧映射</span>
           </label>
           <div class="batch-limit">
             <UiInput
@@ -329,6 +408,13 @@ onMounted(() => {
             />
           </div>
         </div>
+        <div class="health-grid">
+          <div v-for="card in healthSummaryCards" :key="card.label" class="health-card">
+            <span class="health-label">{{ card.label }}</span>
+            <strong class="health-value">{{ card.value }}</strong>
+          </div>
+        </div>
+        <p class="batch-hint">{{ batchHint }}</p>
         <p v-if="batchSummary" class="batch-summary">{{ batchSummary }}</p>
       </section>
 
@@ -360,11 +446,13 @@ onMounted(() => {
               <div class="doc-title-row">
                 <strong>{{ doc.title }}</strong>
                 <span class="badge">{{ doc.status }}</span>
+                <span class="sync-badge" :class="{ visible: !!getSyncHealthItem(doc.id)?.needsSync }">需同步</span>
               </div>
               <div class="doc-meta">
                 <span>{{ doc.category }}</span>
                 <span>v{{ doc.version }}</span>
                 <span>{{ doc.sourceType || 'manual' }}</span>
+                <span v-if="getSyncHealthItem(doc.id)?.latestIndexStatus === 'failed'" class="doc-meta-warn">最新索引失败</span>
               </div>
               <div class="doc-actions">
                 <UiButton size="sm" :loading="actionId === doc.id" @click.stop="runAction(doc.id, () => chunkKbDocument(doc.id), '切分完成')">
@@ -413,6 +501,9 @@ onMounted(() => {
               </UiButton>
               <UiButton variant="primary" :loading="actionId === selectedDocument!.id" @click="runAction(selectedDocument!.id, () => indexKbDocument(selectedDocument!.id), '索引完成')">
                 重新索引
+              </UiButton>
+              <UiButton :loading="actionId === selectedDocument!.id" @click="runAction(selectedDocument!.id, () => indexKbDocument(selectedDocument!.id, { recoverMapping: true }), '修复重建完成')">
+                修复索引
               </UiButton>
             </div>
           </div>
@@ -501,6 +592,42 @@ onMounted(() => {
 .batch-summary {
   margin: 8px 0 0;
   color: var(--text);
+  font-size: var(--font-sm);
+}
+
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.health-card {
+  display: grid;
+  gap: 4px;
+  min-height: 68px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg) 92%, var(--accent-bg));
+}
+
+.health-label {
+  color: var(--text);
+  font-size: var(--font-sm);
+  opacity: 0.8;
+}
+
+.health-value {
+  color: var(--text-h);
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.batch-hint {
+  margin: 8px 0 0;
+  color: var(--text);
+  opacity: 0.82;
   font-size: var(--font-sm);
 }
 
@@ -594,6 +721,28 @@ onMounted(() => {
   font-size: var(--font-sm);
 }
 
+.sync-badge {
+  min-width: 52px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  color: transparent;
+  font-size: 12px;
+  line-height: 1.3;
+  visibility: hidden;
+}
+
+.sync-badge.visible {
+  border-color: color-mix(in srgb, var(--warning, #c97a00) 18%, transparent);
+  background: color-mix(in srgb, var(--warning, #c97a00) 12%, white);
+  color: var(--warning, #8f5200);
+  visibility: visible;
+}
+
+.doc-meta-warn {
+  color: var(--danger, #b42318);
+}
+
 .textarea {
   width: 100%;
   border: 1px solid var(--border);
@@ -626,6 +775,10 @@ onMounted(() => {
 @media (max-width: 640px) {
   .batch-limit {
     width: 100%;
+  }
+
+  .health-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .miss-actions {

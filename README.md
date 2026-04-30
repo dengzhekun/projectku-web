@@ -23,7 +23,7 @@ ProjectKu Web is a full-stack e-commerce project with product catalog, cart, ord
 
 - Frontend: Vue 3, TypeScript, Pinia, Vite
 - Backend: Java 17, Spring Boot 3, MyBatis
-- AI service: Python, FastAPI, Chroma, LightRAG, Neo4j
+- AI service: Python, FastAPI, LightRAG gateway integration, Neo4j
 - Infra: Docker Compose, Nginx, MySQL 8, PostgreSQL/pgvector
 
 ## Repository Layout
@@ -234,7 +234,7 @@ Recommended production stack:
 - MySQL 8
 - Neo4j 5
 - PostgreSQL with pgvector
-- LightRAG in staged rollout mode
+- LightRAG as the production retrieval path
 
 ## Main Views
 
@@ -278,6 +278,8 @@ OpenAPI:
 ## Notes
 
 - `deploy/ai-service.env`, `deploy/lightrag.env`, and `deploy/prod.env` are local/server secrets and are intentionally not committed.
-- The current release keeps Chroma as the stable retrieval path while allowing staged migration to LightRAG.
+- Production retrieval path is `ai-service -> LightRAG -> PostgreSQL/Neo4j`.
+- In the Docker/production LightRAG path, embeddings usually run as `AI_EMBEDDING_PROVIDER=remote_http` via the `ai-service` embedding gateway, pointing to a local or remote embedding backend.
+- If embedding backend is down (for example `127.0.0.1:9001` in local mode), LightRAG docs/status may still look normal while query requests fail. Run `scripts/verify-lightrag-runtime.ps1` and confirm port `9001` health when using local embedding backend.
 - See `NOTICE` for trademark, demo asset, and redistribution caveats.
 - `docs/repo-assets/homepage.png` is generated from the local running frontend and can be refreshed after UI updates.

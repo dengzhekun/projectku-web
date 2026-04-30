@@ -10,6 +10,7 @@ import com.web.pojo.CartItem;
 import com.web.pojo.Order;
 import com.web.pojo.OrderItem;
 import com.web.pojo.Product;
+import com.web.pojo.ProductSku;
 import com.web.service.CouponService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -149,6 +150,83 @@ class OrderServiceImplTest {
                 () -> orderService.checkout(1L, 0L, ""));
 
         assertEquals("STOCK_NOT_ENOUGH", exception.getCode());
+        verify(orderMapper, never()).insert(any(Order.class));
+    }
+
+    @Test
+    void checkoutUsesSkuPriceWhenSkuIsSelected() {
+        CartItem cartItem = new CartItem();
+        cartItem.setUserId(1L);
+        cartItem.setProductId(10L);
+        cartItem.setSkuId(100L);
+        cartItem.setQuantity(2);
+        cartItem.setChecked(1);
+
+        Product product = new Product();
+        product.setId(10L);
+        product.setName("测试商品");
+        product.setPrice(new BigDecimal("3000.00"));
+        product.setStock(10);
+
+        ProductSku sku = new ProductSku();
+        sku.setId(100L);
+        sku.setProductId(10L);
+        sku.setPrice(new BigDecimal("2899.00"));
+        sku.setStock(5);
+
+        when(cartItemMapper.getListByUserId(1L)).thenReturn(List.of(cartItem));
+        when(productMapper.getById(10L)).thenReturn(product);
+        when(productMapper.getSkuById(100L)).thenReturn(sku);
+        when(productMapper.decreaseSkuStockIfEnough(100L, 2)).thenReturn(1);
+        when(productMapper.decreaseStockIfEnough(10L, 2)).thenReturn(1);
+        when(orderMapper.insert(any(Order.class))).thenAnswer(invocation -> {
+            Order order = invocation.getArgument(0);
+            order.setId(99L);
+            return 1;
+        });
+
+        Map<String, Object> result = orderService.checkout(1L, 0L, "");
+
+        Order order = (Order) result.get("order");
+        @SuppressWarnings("unchecked")
+        List<OrderItem> items = (List<OrderItem>) result.get("orderItems");
+        assertEquals(0, order.getTotalAmount().compareTo(new BigDecimal("5798.00")));
+        assertEquals(0, items.get(0).getPrice().compareTo(new BigDecimal("2899.00")));
+        assertEquals(0, items.get(0).getTotalAmount().compareTo(new BigDecimal("5798.00")));
+    }
+
+    @Test
+    void checkoutRejectsSkuThatDoesNotBelongToProduct() {
+        CartItem cartItem = new CartItem();
+        cartItem.setUserId(1L);
+        cartItem.setProductId(10L);
+        cartItem.setSkuId(100L);
+        cartItem.setQuantity(1);
+        cartItem.setChecked(1);
+
+        Product product = new Product();
+        product.setId(10L);
+        product.setName("测试商品");
+        product.setPrice(new BigDecimal("3000.00"));
+        product.setStock(10);
+
+        ProductSku sku = new ProductSku();
+        sku.setId(100L);
+        sku.setProductId(99L);
+        sku.setPrice(new BigDecimal("2899.00"));
+        sku.setStock(5);
+
+        when(cartItemMapper.getListByUserId(1L)).thenReturn(List.of(cartItem));
+        when(productMapper.getById(10L)).thenReturn(product);
+        when(productMapper.getSkuById(100L)).thenReturn(sku);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> orderService.checkout(1L, 0L, ""));
+
+        assertEquals("SKU_INVALID", exception.getCode());
+        verify(productMapper, never()).decreaseSkuStockIfEnough(100L, 1);
+        verify(productMapper, never()).decreaseStockIfEnough(10L, 1);
         verify(orderMapper, never()).insert(any(Order.class));
     }
 

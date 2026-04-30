@@ -18,6 +18,7 @@ def health() -> dict:
         "status": "ok",
         "llmProvider": settings.ai_llm_provider,
         "embeddingProvider": settings.ai_embedding_provider,
-        "chromaPath": settings.chroma_path,
+        "knowledgeRetriever": settings.knowledge_retriever,
+        "indexTarget": settings.lightrag_collection,
         "neo4jEnabled": bool(settings.neo4j_password),
     }

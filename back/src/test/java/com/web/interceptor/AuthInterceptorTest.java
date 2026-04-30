@@ -16,7 +16,7 @@ class AuthInterceptorTest {
 
     private static final byte[] JWT_KEY = "projectku_secret_key".getBytes();
 
-    private final AuthInterceptor interceptor = new AuthInterceptor();
+    private final AuthInterceptor interceptor = new AuthInterceptor(new com.web.security.AuthTokenService());
     private final MockHttpServletResponse response = new MockHttpServletResponse();
 
     @AfterEach

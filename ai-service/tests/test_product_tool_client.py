@@ -43,6 +43,9 @@ def test_normalize_product_alias_maps_apple_model_to_iphone():
     assert normalize_product_alias("苹果15Pro") == "iPhone 15 Pro"
     assert normalize_product_alias("苹果15") == "iPhone 15"
     assert normalize_product_alias("iphone15pro") == "iPhone 15 Pro"
+    assert normalize_product_alias("苹果15ProMax") == "iPhone 15 Pro Max"
+    assert normalize_product_alias("iphone15promax") == "iPhone 15 Pro Max"
+    assert normalize_product_alias("iPhone SE") == "iPhone SE"
 
 
 def test_normalize_product_alias_does_not_treat_plain_apple_as_iphone():
@@ -61,6 +64,12 @@ def test_extract_product_keyword_normalizes_common_phone_aliases():
     assert extract_product_keyword("苹果15Pro多少钱？") == "iPhone 15 Pro"
     assert extract_product_keyword("小米14多少钱？") == "Xiaomi 14"
     assert extract_product_keyword("红米K70有货吗？") == "Redmi K70"
+
+
+def test_extract_product_keyword_ignores_greeting_noise_before_phone_alias():
+    assert extract_product_keyword("你好，苹果15Pro多少钱？") == "iPhone 15 Pro"
+    assert extract_product_keyword("您好 苹果15多少钱？") == "iPhone 15"
+    assert extract_product_keyword("麻烦问下苹果15Pro多少钱？") == "iPhone 15 Pro"
 
 
 def test_parse_product_query_distinguishes_base_and_pro_iphone_models():

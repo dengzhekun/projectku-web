@@ -23,7 +23,6 @@ def test_apply_runtime_environment_sets_embedding_download_env(monkeypatch, tmp_
         "HF_HOME",
         "HUGGINGFACE_HUB_CACHE",
         "HF_HUB_DISABLE_TELEMETRY",
-        "ANONYMIZED_TELEMETRY",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -31,7 +30,6 @@ def test_apply_runtime_environment_sets_embedding_download_env(monkeypatch, tmp_
     settings = config_module.Settings(
         ai_embedding_hf_endpoint="https://hf-mirror.com",
         ai_embedding_cache_dir=str(cache_dir),
-        chroma_anonymized_telemetry=False,
     )
 
     config_module.apply_runtime_environment(settings)
@@ -40,4 +38,9 @@ def test_apply_runtime_environment_sets_embedding_download_env(monkeypatch, tmp_
     assert config_module.os.environ["HF_HOME"] == str(cache_dir)
     assert config_module.os.environ["HUGGINGFACE_HUB_CACHE"] == str(cache_dir / "hub")
     assert config_module.os.environ["HF_HUB_DISABLE_TELEMETRY"] == "1"
-    assert config_module.os.environ["ANONYMIZED_TELEMETRY"] == "False"
+
+
+def test_settings_default_lightrag_collection_name():
+    settings = config_module.Settings(_env_file=None)
+
+    assert settings.lightrag_collection == "ecommerce_kb_v1"

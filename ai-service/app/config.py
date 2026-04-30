@@ -37,16 +37,14 @@ class Settings(BaseSettings):
     ai_embedding_remote_api_key: str = ""
     ai_embedding_remote_timeout_seconds: int = 30
     ai_embedding_gateway_api_key: str = ""
-
-    chroma_path: str = "./data/chroma"
-    chroma_collection: str = "ecommerce_kb_v1"
-    chroma_anonymized_telemetry: bool = False
-    knowledge_retriever: str = "chroma"
-    lightrag_base_url: str = "http://127.0.0.1:9621"
+    lightrag_collection: str = "ecommerce_kb_v1"
+    knowledge_retriever: str = "lightrag"
+    lightrag_base_url: str = "http://127.0.0.1:19621"
     lightrag_api_key: str = ""
     lightrag_api_key_header: str = "X-API-Key"
     lightrag_timeout_seconds: int = 60
     lightrag_query_mode: str = "hybrid"
+    lightrag_doc_registry_path: str = "./data/lightrag_doc_registry.json"
 
     neo4j_uri: str = "bolt://127.0.0.1:7687"
     neo4j_user: str = "neo4j"
@@ -61,8 +59,8 @@ class Settings(BaseSettings):
     product_tool_max_results: int = 5
 
     def ensure_dirs(self) -> None:
-        Path(self.chroma_path).mkdir(parents=True, exist_ok=True)
         Path(self.ai_embedding_cache_dir).mkdir(parents=True, exist_ok=True)
+        Path(self.lightrag_doc_registry_path).resolve().parent.mkdir(parents=True, exist_ok=True)
 
 
 def apply_runtime_environment(settings: Settings) -> None:
@@ -71,7 +69,6 @@ def apply_runtime_environment(settings: Settings) -> None:
     os.environ.setdefault("HF_HOME", str(cache_dir))
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(cache_dir / "hub"))
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
-    os.environ.setdefault("ANONYMIZED_TELEMETRY", str(settings.chroma_anonymized_telemetry))
 
 
 @lru_cache(maxsize=1)

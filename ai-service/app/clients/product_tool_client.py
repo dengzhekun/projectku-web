@@ -79,8 +79,17 @@ NON_PRODUCT_SERVICE_TERMS = (
 )
 
 QUERY_NOISE_TERMS = (
+    "你好",
+    "您好",
+    "哈喽",
+    "请教",
     "请问",
+    "请帮我",
     "帮我",
+    "麻烦",
+    "麻烦你",
+    "麻烦问下",
+    "问下",
     "看看",
     "查询",
     "一下",
@@ -143,13 +152,16 @@ def normalize_product_alias(keyword: str) -> str:
     compact = re.sub(r"\s+", "", normalized)
     lower_compact = compact.lower()
 
-    apple_model = re.match(r"^(?:苹果|iphone)(\d{1,2})(pro|max|plus)?$", lower_compact, re.IGNORECASE)
+    if lower_compact in ("iphonese", "苹果se", "苹果手机se"):
+        return "iPhone SE"
+
+    apple_model = re.match(r"^(?:苹果|iphone)(\d{1,2})(promax|pro|max|plus|se)?$", lower_compact, re.IGNORECASE)
     if apple_model:
         model = apple_model.group(1)
-        suffix = apple_model.group(2)
+        suffix = normalize_variant(apple_model.group(2))
         parts = ["iPhone", model]
         if suffix:
-            parts.append(suffix.capitalize())
+            parts.extend(part.capitalize() for part in suffix.split())
         return " ".join(parts)
 
     apple_phone = re.match(r"^苹果手机$", compact)

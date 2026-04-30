@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
@@ -21,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +39,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -213,7 +216,7 @@ class KnowledgeBaseServiceImplTest {
         document.setId(9L);
         document.setTitle("Returns");
         document.setCategory("policy");
-        document.setVersion(3);
+        document.setVersion(1);
         document.setStatus("chunked");
         document.setContentText("hello");
 
@@ -224,21 +227,69 @@ class KnowledgeBaseServiceImplTest {
 
         doReturn(document).when(knowledgeBaseMapper).getDocumentById(9L);
         doReturn(chunks).when(knowledgeBaseMapper).getChunksByDocumentId(9L);
-        when(aiKnowledgeBaseClient.indexDocumentChunks(document, chunks))
+        when(aiKnowledgeBaseClient.indexDocumentChunks(document, chunks, false))
                 .thenReturn(new AiKnowledgeBaseClient.IndexResult("local_bge_m3", "ecommerce_kb_v1", 2));
 
         knowledgeBaseService.indexDocument(9L);
 
-        verify(aiKnowledgeBaseClient).indexDocumentChunks(document, chunks);
+        verify(aiKnowledgeBaseClient).indexDocumentChunks(document, chunks, false);
         ArgumentCaptor<KbIndexRecord> recordCaptor = ArgumentCaptor.forClass(KbIndexRecord.class);
         verify(knowledgeBaseMapper).insertIndexRecord(recordCaptor.capture());
         assertEquals("success", recordCaptor.getValue().getStatus());
         assertEquals(2, recordCaptor.getValue().getIndexedChunkCount());
-        assertEquals(3, recordCaptor.getValue().getVersion());
+        assertEquals(1, recordCaptor.getValue().getVersion());
 
         ArgumentCaptor<KbDocument> documentCaptor = ArgumentCaptor.forClass(KbDocument.class);
         verify(knowledgeBaseMapper).updateDocument(documentCaptor.capture());
         assertEquals("indexed", documentCaptor.getValue().getStatus());
+    }
+
+    @Test
+    void indexDocumentRecoversMappingForVersionedChunkedDocument() {
+        KbDocument document = new KbDocument();
+        document.setId(19L);
+        document.setTitle("Returns v2");
+        document.setCategory("policy");
+        document.setVersion(2);
+        document.setStatus("chunked");
+        document.setContentText("hello");
+
+        List<KbChunk> chunks = List.of(
+                new KbChunk(201L, 19L, 0, "chunk-1", 7, "active", null)
+        );
+
+        doReturn(document).when(knowledgeBaseMapper).getDocumentById(19L);
+        doReturn(chunks).when(knowledgeBaseMapper).getChunksByDocumentId(19L);
+        when(aiKnowledgeBaseClient.indexDocumentChunks(document, chunks, true))
+                .thenReturn(new AiKnowledgeBaseClient.IndexResult("local_bge_m3", "ecommerce_kb_v1", 1));
+
+        knowledgeBaseService.indexDocument(19L);
+
+        verify(aiKnowledgeBaseClient).indexDocumentChunks(document, chunks, true);
+    }
+
+    @Test
+    void indexDocumentCanForceMappingRecoveryForInitialVersionDocument() {
+        KbDocument document = new KbDocument();
+        document.setId(29L);
+        document.setTitle("Returns v1");
+        document.setCategory("policy");
+        document.setVersion(1);
+        document.setStatus("chunked");
+        document.setContentText("hello");
+
+        List<KbChunk> chunks = List.of(
+                new KbChunk(301L, 29L, 0, "chunk-1", 7, "active", null)
+        );
+
+        doReturn(document).when(knowledgeBaseMapper).getDocumentById(29L);
+        doReturn(chunks).when(knowledgeBaseMapper).getChunksByDocumentId(29L);
+        when(aiKnowledgeBaseClient.indexDocumentChunks(document, chunks, true))
+                .thenReturn(new AiKnowledgeBaseClient.IndexResult("local_bge_m3", "ecommerce_kb_v1", 1));
+
+        knowledgeBaseService.indexDocument(29L, true);
+
+        verify(aiKnowledgeBaseClient).indexDocumentChunks(document, chunks, true);
     }
 
     @Test
@@ -258,7 +309,7 @@ class KnowledgeBaseServiceImplTest {
         doReturn(document).when(knowledgeBaseMapper).getDocumentById(9L);
         doReturn(chunks).when(knowledgeBaseMapper).getChunksByDocumentId(9L);
         doThrow(new RuntimeException("index failed"))
-                .when(aiKnowledgeBaseClient).indexDocumentChunks(any(KbDocument.class), anyList());
+                .when(aiKnowledgeBaseClient).indexDocumentChunks(any(KbDocument.class), anyList(), any(Boolean.class));
 
         BusinessException exception = assertThrows(BusinessException.class,
                 () -> knowledgeBaseService.indexDocument(9L));
@@ -292,7 +343,7 @@ class KnowledgeBaseServiceImplTest {
         doReturn(chunks).when(knowledgeBaseMapper).getChunksByDocumentId(21L);
 
         List<KnowledgeBaseResponses.BatchIndexItemResponse> responses =
-                knowledgeBaseService.batchIndexDocuments(null, null);
+                knowledgeBaseService.batchIndexDocuments(null, null, null, null);
 
         assertEquals(1, responses.size());
         KnowledgeBaseResponses.BatchIndexItemResponse response = responses.get(0);
@@ -303,7 +354,7 @@ class KnowledgeBaseServiceImplTest {
         assertEquals("skip", response.getAction());
         assertEquals("skipped", response.getResult());
         assertTrue(response.getError().contains("exceeds threshold"));
-        verify(aiKnowledgeBaseClient, never()).indexDocumentChunks(any(KbDocument.class), anyList());
+        verify(aiKnowledgeBaseClient, never()).indexDocumentChunks(any(KbDocument.class), anyList(), any(Boolean.class));
     }
 
     @Test
@@ -321,11 +372,11 @@ class KnowledgeBaseServiceImplTest {
 
         doReturn(List.of(chunked)).when(knowledgeBaseMapper).getDocuments(null, "chunked", null);
         doReturn(chunks).when(knowledgeBaseMapper).getChunksByDocumentId(22L);
-        when(aiKnowledgeBaseClient.indexDocumentChunks(chunked, chunks))
+        when(aiKnowledgeBaseClient.indexDocumentChunks(chunked, chunks, true))
                 .thenReturn(new AiKnowledgeBaseClient.IndexResult("local_bge_m3", "ecommerce_kb_v1", 51));
 
         List<KnowledgeBaseResponses.BatchIndexItemResponse> responses =
-                knowledgeBaseService.batchIndexDocuments(true, null);
+                knowledgeBaseService.batchIndexDocuments(true, null, null, null);
 
         assertEquals(1, responses.size());
         KnowledgeBaseResponses.BatchIndexItemResponse response = responses.get(0);
@@ -333,7 +384,7 @@ class KnowledgeBaseServiceImplTest {
         assertEquals("success", response.getResult());
         assertEquals("indexed", response.getStatus());
         assertNull(response.getError());
-        verify(aiKnowledgeBaseClient).indexDocumentChunks(chunked, chunks);
+        verify(aiKnowledgeBaseClient).indexDocumentChunks(chunked, chunks, true);
     }
 
     @Test
@@ -352,15 +403,62 @@ class KnowledgeBaseServiceImplTest {
         List<KbChunk> firstChunks = List.of(new KbChunk(1L, 31L, 0, "chunk", 5, "active", null));
         doReturn(List.of(first, second)).when(knowledgeBaseMapper).getDocuments(null, "chunked", null);
         doReturn(firstChunks).when(knowledgeBaseMapper).getChunksByDocumentId(31L);
-        when(aiKnowledgeBaseClient.indexDocumentChunks(first, firstChunks))
+        when(aiKnowledgeBaseClient.indexDocumentChunks(first, firstChunks, false))
                 .thenReturn(new AiKnowledgeBaseClient.IndexResult("local_bge_m3", "ecommerce_kb_v1", 1));
 
         List<KnowledgeBaseResponses.BatchIndexItemResponse> responses =
-                knowledgeBaseService.batchIndexDocuments(null, 1);
+                knowledgeBaseService.batchIndexDocuments(null, 1, null, null);
 
         assertEquals(1, responses.size());
         assertEquals(31L, responses.get(0).getDocumentId());
         verify(knowledgeBaseMapper, never()).getChunksByDocumentId(32L);
+
+    }
+
+    @Test
+    void batchIndexDocumentsCanIncludeIndexedDocsAndRecoverMappings() {
+        KbDocument indexed = new KbDocument();
+        indexed.setId(41L);
+        indexed.setTitle("Indexed FAQ");
+        indexed.setVersion(2);
+        indexed.setStatus("indexed");
+
+        List<KbChunk> chunks = List.of(new KbChunk(1L, 41L, 0, "chunk", 5, "active", null));
+        doReturn(Collections.emptyList()).when(knowledgeBaseMapper).getDocuments(null, "chunked", null);
+        doReturn(List.of(indexed)).when(knowledgeBaseMapper).getDocuments(null, "indexed", null);
+        doReturn(chunks).when(knowledgeBaseMapper).getChunksByDocumentId(41L);
+        when(aiKnowledgeBaseClient.indexDocumentChunks(indexed, chunks, true))
+                .thenReturn(new AiKnowledgeBaseClient.IndexResult("local_bge_m3", "ecommerce_kb_v1", 1));
+
+        List<KnowledgeBaseResponses.BatchIndexItemResponse> responses =
+                knowledgeBaseService.batchIndexDocuments(null, null, true, true);
+
+        assertEquals(1, responses.size());
+        assertEquals(41L, responses.get(0).getDocumentId());
+        assertEquals("success", responses.get(0).getResult());
+        verify(aiKnowledgeBaseClient).indexDocumentChunks(indexed, chunks, true);
+    }
+
+    @Test
+    void batchIndexDocumentsRecoversVersionedChunkedDocumentsWithoutExplicitFlag() {
+        KbDocument chunked = new KbDocument();
+        chunked.setId(42L);
+        chunked.setTitle("Edited FAQ");
+        chunked.setVersion(3);
+        chunked.setStatus("chunked");
+
+        List<KbChunk> chunks = List.of(new KbChunk(1L, 42L, 0, "chunk", 5, "active", null));
+        doReturn(List.of(chunked)).when(knowledgeBaseMapper).getDocuments(null, "chunked", null);
+        doReturn(chunks).when(knowledgeBaseMapper).getChunksByDocumentId(42L);
+        when(aiKnowledgeBaseClient.indexDocumentChunks(chunked, chunks, true))
+                .thenReturn(new AiKnowledgeBaseClient.IndexResult("local_bge_m3", "ecommerce_kb_v1", 1));
+
+        List<KnowledgeBaseResponses.BatchIndexItemResponse> responses =
+                knowledgeBaseService.batchIndexDocuments(null, null, null, null);
+
+        assertEquals(1, responses.size());
+        assertEquals("success", responses.get(0).getResult());
+        verify(aiKnowledgeBaseClient).indexDocumentChunks(chunked, chunks, true);
     }
 
     @Test
@@ -377,11 +475,125 @@ class KnowledgeBaseServiceImplTest {
 
         knowledgeBaseService.deleteDocument(3L);
 
-        verify(knowledgeBaseMapper).deleteChunksByDocumentId(3L);
-        verify(knowledgeBaseMapper).deleteIndexRecordsByDocumentId(3L);
-        verify(knowledgeBaseMapper).deleteHitLogsByDocumentId(3L);
-        verify(knowledgeBaseMapper).deleteDocument(3L);
+        InOrder deleteOrder = inOrder(knowledgeBaseMapper, aiKnowledgeBaseClient);
+        deleteOrder.verify(knowledgeBaseMapper).getDocumentById(3L);
+        deleteOrder.verify(aiKnowledgeBaseClient).deleteDocument(3L);
+        deleteOrder.verify(knowledgeBaseMapper).deleteHitLogsByDocumentId(3L);
+        deleteOrder.verify(knowledgeBaseMapper).deleteIndexRecordsByDocumentId(3L);
+        deleteOrder.verify(knowledgeBaseMapper).deleteChunksByDocumentId(3L);
+        deleteOrder.verify(knowledgeBaseMapper).deleteDocument(3L);
         assertFalse(Files.exists(storedFile));
+    }
+
+    @Test
+    void deleteDocumentFailsWhenAiServiceDeleteFailsAndSkipsLocalCleanup() throws Exception {
+        Path storedFile = Files.createDirectories(tempDir.resolve("8")).resolve("faq.txt");
+        Files.writeString(storedFile, "content", StandardCharsets.UTF_8);
+
+        KbDocument document = new KbDocument();
+        document.setId(8L);
+        document.setStoragePath(storedFile.toString());
+
+        doReturn(document).when(knowledgeBaseMapper).getDocumentById(8L);
+        doThrow(new BusinessException("AI_SERVICE_UNAVAILABLE", "delete failed"))
+                .when(aiKnowledgeBaseClient).deleteDocument(8L);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> knowledgeBaseService.deleteDocument(8L));
+
+        assertEquals("AI_SERVICE_UNAVAILABLE", exception.getCode());
+        verify(knowledgeBaseMapper, never()).deleteHitLogsByDocumentId(8L);
+        verify(knowledgeBaseMapper, never()).deleteIndexRecordsByDocumentId(8L);
+        verify(knowledgeBaseMapper, never()).deleteChunksByDocumentId(8L);
+        verify(knowledgeBaseMapper, never()).deleteDocument(8L);
+        assertTrue(Files.exists(storedFile));
+    }
+
+    @Test
+    void getSyncHealthBuildsAggregateAndNeedsSyncFlags() {
+        KbDocument indexedHealthy = new KbDocument();
+        indexedHealthy.setId(101L);
+        indexedHealthy.setTitle("Indexed Healthy");
+        indexedHealthy.setCategory("guide");
+        indexedHealthy.setStatus("indexed");
+        indexedHealthy.setVersion(1);
+
+        KbDocument indexedStale = new KbDocument();
+        indexedStale.setId(102L);
+        indexedStale.setTitle("Indexed Stale");
+        indexedStale.setCategory("guide");
+        indexedStale.setStatus("indexed");
+        indexedStale.setVersion(2);
+
+        KbDocument parsedDoc = new KbDocument();
+        parsedDoc.setId(103L);
+        parsedDoc.setTitle("Parsed");
+        parsedDoc.setCategory("policy");
+        parsedDoc.setStatus("parsed");
+        parsedDoc.setVersion(1);
+
+        KbDocument failedDoc = new KbDocument();
+        failedDoc.setId(104L);
+        failedDoc.setTitle("Failed");
+        failedDoc.setCategory("policy");
+        failedDoc.setStatus("failed");
+        failedDoc.setVersion(3);
+
+        doReturn(List.of(indexedHealthy, indexedStale, parsedDoc, failedDoc))
+                .when(knowledgeBaseMapper).getDocuments(null, null, null);
+        doReturn(List.of(
+                new KbChunk(1L, 101L, 0, "a", 1, "active", null),
+                new KbChunk(2L, 101L, 1, "b", 1, "active", null)
+        )).when(knowledgeBaseMapper).getChunksByDocumentId(101L);
+        doReturn(List.of(
+                new KbChunk(3L, 102L, 0, "a", 1, "active", null),
+                new KbChunk(4L, 102L, 1, "b", 1, "active", null),
+                new KbChunk(5L, 102L, 2, "c", 1, "active", null)
+        )).when(knowledgeBaseMapper).getChunksByDocumentId(102L);
+        doReturn(Collections.emptyList()).when(knowledgeBaseMapper).getChunksByDocumentId(103L);
+        doReturn(List.of(new KbChunk(6L, 104L, 0, "z", 1, "active", null)))
+                .when(knowledgeBaseMapper).getChunksByDocumentId(104L);
+
+        KbIndexRecord success2 = new KbIndexRecord();
+        success2.setStatus("success");
+        success2.setIndexedChunkCount(2);
+        doReturn(List.of(success2)).when(knowledgeBaseMapper).getIndexRecordsByDocumentId(101L);
+
+        KbIndexRecord staleLatestSuccess = new KbIndexRecord();
+        staleLatestSuccess.setStatus("success");
+        staleLatestSuccess.setIndexedChunkCount(2);
+        doReturn(List.of(staleLatestSuccess)).when(knowledgeBaseMapper).getIndexRecordsByDocumentId(102L);
+
+        doReturn(Collections.emptyList()).when(knowledgeBaseMapper).getIndexRecordsByDocumentId(103L);
+
+        KbIndexRecord failedLatest = new KbIndexRecord();
+        failedLatest.setStatus("failed");
+        failedLatest.setIndexedChunkCount(1);
+        failedLatest.setErrorMessage("boom");
+        doReturn(List.of(failedLatest)).when(knowledgeBaseMapper).getIndexRecordsByDocumentId(104L);
+
+        KnowledgeBaseResponses.SyncHealthResponse response = knowledgeBaseService.getSyncHealth();
+
+        assertEquals(4, response.getTotalDocuments());
+        assertEquals(1, response.getParsedDocuments());
+        assertEquals(0, response.getChunkedDocuments());
+        assertEquals(2, response.getIndexedDocuments());
+        assertEquals(1, response.getFailedDocuments());
+        assertEquals(3, response.getNeedsSyncDocuments());
+        assertEquals(1, response.getStaleDocuments());
+        assertEquals(1, response.getMissingChunkDocuments());
+        assertEquals(1, response.getLatestFailedIndexDocuments());
+
+        Map<Long, KnowledgeBaseResponses.SyncHealthItemResponse> itemMap = response.getItems().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        KnowledgeBaseResponses.SyncHealthItemResponse::getId,
+                        item -> item));
+        assertFalse(itemMap.get(101L).getNeedsSync());
+        assertTrue(itemMap.get(102L).getNeedsSync());
+        assertTrue(itemMap.get(103L).getNeedsSync());
+        assertTrue(itemMap.get(104L).getNeedsSync());
+        assertEquals("failed", itemMap.get(104L).getLatestIndexStatus());
+        assertEquals("boom", itemMap.get(104L).getLatestIndexError());
     }
 
     @Test

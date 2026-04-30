@@ -134,6 +134,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     public void deleteDocument(Long id) {
         validateDocumentId(id);
         KbDocument document = getRequiredDocument(id);
+        aiKnowledgeBaseClient.deleteDocument(id);
         knowledgeBaseMapper.deleteHitLogsByDocumentId(id);
         knowledgeBaseMapper.deleteIndexRecordsByDocumentId(id);
         knowledgeBaseMapper.deleteChunksByDocumentId(id);
@@ -183,28 +184,57 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Override
     @Transactional
     public void indexDocument(Long id) {
+        indexDocument(id, null);
+    }
+
+    @Override
+    @Transactional
+    public void indexDocument(Long id, Boolean recoverMapping) {
         validateDocumentId(id);
         KbDocument document = getRequiredDocument(id);
         List<KbChunk> chunks = knowledgeBaseMapper.getChunksByDocumentId(id);
         if (chunks == null || chunks.isEmpty()) {
             throw new BusinessException("VALIDATION_FAILED", "Please generate chunks before indexing");
         }
-        indexDocumentWithChunks(document, chunks);
+        indexDocumentWithChunks(document, chunks, shouldRecoverMapping(document, Boolean.TRUE.equals(recoverMapping)));
     }
 
     @Override
     @Transactional
-    public List<KnowledgeBaseResponses.BatchIndexItemResponse> batchIndexDocuments(Boolean allowLarge, Integer limit) {
+    public List<KnowledgeBaseResponses.BatchIndexItemResponse> batchIndexDocuments(
+            Boolean allowLarge,
+            Integer limit,
+            Boolean includeIndexed,
+            Boolean recoverMapping) {
         Integer normalizedLimit = normalizeOptionalLimit(limit);
         boolean allowLargeDocument = Boolean.TRUE.equals(allowLarge);
+        List<KbDocument> targetDocuments = new ArrayList<>();
         List<KbDocument> chunkedDocuments = knowledgeBaseMapper.getDocuments(null, STATUS_CHUNKED, null);
-        if (chunkedDocuments == null || chunkedDocuments.isEmpty()) {
+        if (chunkedDocuments != null) {
+            targetDocuments.addAll(chunkedDocuments);
+        }
+        if (Boolean.TRUE.equals(includeIndexed)) {
+            List<KbDocument> indexedDocuments = knowledgeBaseMapper.getDocuments(null, STATUS_INDEXED, null);
+            if (indexedDocuments != null) {
+                for (KbDocument indexedDocument : indexedDocuments) {
+                    if (indexedDocument == null || indexedDocument.getId() == null) {
+                        continue;
+                    }
+                    boolean exists = targetDocuments.stream()
+                            .anyMatch(item -> item != null && indexedDocument.getId().equals(item.getId()));
+                    if (!exists) {
+                        targetDocuments.add(indexedDocument);
+                    }
+                }
+            }
+        }
+        if (targetDocuments.isEmpty()) {
             return Collections.emptyList();
         }
 
         List<KnowledgeBaseResponses.BatchIndexItemResponse> responses = new ArrayList<>();
         int processed = 0;
-        for (KbDocument document : chunkedDocuments) {
+        for (KbDocument document : targetDocuments) {
             if (document == null) {
                 continue;
             }
@@ -239,7 +269,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             }
 
             try {
-                indexDocumentWithChunks(document, chunks);
+                boolean recoverCurrentDocument = shouldRecoverMapping(document, Boolean.TRUE.equals(recoverMapping));
+                indexDocumentWithChunks(document, chunks, recoverCurrentDocument);
                 responses.add(toBatchIndexItemResponse(
                         document.getId(),
                         document.getTitle(),
@@ -262,9 +293,9 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         return responses;
     }
 
-    private void indexDocumentWithChunks(KbDocument document, List<KbChunk> chunks) {
+    private void indexDocumentWithChunks(KbDocument document, List<KbChunk> chunks, boolean recoverMapping) {
         try {
-            AiKnowledgeBaseClient.IndexResult result = aiKnowledgeBaseClient.indexDocumentChunks(document, chunks);
+            AiKnowledgeBaseClient.IndexResult result = aiKnowledgeBaseClient.indexDocumentChunks(document, chunks, recoverMapping);
             KbIndexRecord record = new KbIndexRecord();
             record.setDocumentId(document.getId());
             record.setVersion(document.getVersion());
@@ -283,6 +314,20 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             persistFailedIndexRecord(document, chunks.size(), e.getMessage());
             throw new BusinessException("KB_INDEX_FAILED", "Indexing failed");
         }
+    }
+
+    private boolean shouldRecoverMapping(KbDocument document, boolean requestedRecoverMapping) {
+        if (requestedRecoverMapping) {
+            return true;
+        }
+        if (document == null) {
+            return false;
+        }
+        if (STATUS_INDEXED.equals(document.getStatus())) {
+            return true;
+        }
+        Integer version = document.getVersion();
+        return version != null && version > 1;
     }
 
     @Override
@@ -400,6 +445,122 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 .filter(Objects::nonNull)
                 .map(this::toCustomerServiceLogResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public KnowledgeBaseResponses.SyncHealthResponse getSyncHealth() {
+        List<KbDocument> documents = knowledgeBaseMapper.getDocuments(null, null, null);
+        if (documents == null || documents.isEmpty()) {
+            KnowledgeBaseResponses.SyncHealthResponse empty = new KnowledgeBaseResponses.SyncHealthResponse();
+            empty.setTotalDocuments(0);
+            empty.setParsedDocuments(0);
+            empty.setChunkedDocuments(0);
+            empty.setIndexedDocuments(0);
+            empty.setFailedDocuments(0);
+            empty.setNeedsSyncDocuments(0);
+            empty.setStaleDocuments(0);
+            empty.setMissingChunkDocuments(0);
+            empty.setLatestFailedIndexDocuments(0);
+            empty.setItems(Collections.emptyList());
+            return empty;
+        }
+
+        int parsedDocuments = 0;
+        int chunkedDocuments = 0;
+        int indexedDocuments = 0;
+        int failedDocuments = 0;
+        int needsSyncDocuments = 0;
+        int staleDocuments = 0;
+        int missingChunkDocuments = 0;
+        int latestFailedIndexDocuments = 0;
+        List<KnowledgeBaseResponses.SyncHealthItemResponse> items = new ArrayList<>();
+
+        for (KbDocument document : documents) {
+            if (document == null || document.getId() == null) {
+                continue;
+            }
+            String status = normalizeOptional(document.getStatus());
+            if (STATUS_PARSED.equals(status)) {
+                parsedDocuments++;
+            } else if (STATUS_CHUNKED.equals(status)) {
+                chunkedDocuments++;
+            } else if (STATUS_INDEXED.equals(status)) {
+                indexedDocuments++;
+            } else if (STATUS_FAILED.equals(status)) {
+                failedDocuments++;
+            }
+
+            List<KbChunk> chunks = knowledgeBaseMapper.getChunksByDocumentId(document.getId());
+            int chunkCount = chunks == null ? 0 : chunks.size();
+            List<KbIndexRecord> indexRecords = knowledgeBaseMapper.getIndexRecordsByDocumentId(document.getId());
+            KbIndexRecord latestIndexRecord = (indexRecords == null || indexRecords.isEmpty()) ? null : indexRecords.get(0);
+            KbIndexRecord latestSuccessRecord = findLatestSuccessRecord(indexRecords);
+
+            boolean latestIsFailed = latestIndexRecord != null && STATUS_FAILED.equals(normalizeOptional(latestIndexRecord.getStatus()));
+            if (latestIsFailed) {
+                latestFailedIndexDocuments++;
+            }
+
+            boolean missingChunks = chunkCount <= 0;
+            if (missingChunks) {
+                missingChunkDocuments++;
+            }
+
+            boolean stale = latestSuccessRecord != null
+                    && !Objects.equals(latestSuccessRecord.getIndexedChunkCount(), chunkCount);
+            if (stale) {
+                staleDocuments++;
+            }
+
+            boolean needsSync = STATUS_PARSED.equals(status)
+                    || STATUS_CHUNKED.equals(status)
+                    || STATUS_FAILED.equals(status)
+                    || missingChunks
+                    || latestSuccessRecord == null
+                    || stale;
+
+            if (needsSync) {
+                needsSyncDocuments++;
+            }
+
+            KnowledgeBaseResponses.SyncHealthItemResponse item = new KnowledgeBaseResponses.SyncHealthItemResponse();
+            item.setId(document.getId());
+            item.setTitle(document.getTitle());
+            item.setCategory(document.getCategory());
+            item.setStatus(document.getStatus());
+            item.setVersion(document.getVersion());
+            item.setChunkCount(chunkCount);
+            item.setLatestIndexStatus(latestIndexRecord == null ? null : latestIndexRecord.getStatus());
+            item.setLatestIndexedChunkCount(latestIndexRecord == null ? null : latestIndexRecord.getIndexedChunkCount());
+            item.setLatestIndexError(latestIndexRecord == null ? null : latestIndexRecord.getErrorMessage());
+            item.setNeedsSync(needsSync);
+            items.add(item);
+        }
+
+        KnowledgeBaseResponses.SyncHealthResponse response = new KnowledgeBaseResponses.SyncHealthResponse();
+        response.setTotalDocuments(items.size());
+        response.setParsedDocuments(parsedDocuments);
+        response.setChunkedDocuments(chunkedDocuments);
+        response.setIndexedDocuments(indexedDocuments);
+        response.setFailedDocuments(failedDocuments);
+        response.setNeedsSyncDocuments(needsSyncDocuments);
+        response.setStaleDocuments(staleDocuments);
+        response.setMissingChunkDocuments(missingChunkDocuments);
+        response.setLatestFailedIndexDocuments(latestFailedIndexDocuments);
+        response.setItems(items);
+        return response;
+    }
+
+    private KbIndexRecord findLatestSuccessRecord(List<KbIndexRecord> records) {
+        if (records == null || records.isEmpty()) {
+            return null;
+        }
+        for (KbIndexRecord record : records) {
+            if (record != null && "success".equals(normalizeOptional(record.getStatus()))) {
+                return record;
+            }
+        }
+        return null;
     }
 
     private void persistFailedIndexRecord(KbDocument document, int chunkCount, String errorMessage) {

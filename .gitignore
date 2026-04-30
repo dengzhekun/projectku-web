@@ -50,3 +50,5 @@ deploy/prod.env
 .~*
 新建 文本文档.txt
 .portable/
+.runtime-logs/
+temp/

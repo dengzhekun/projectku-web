@@ -19,21 +19,19 @@ These should stay local to your machine or server:
 
 They are intentionally ignored by git.
 
-## Which retriever mode should I use first?
+## Which retriever mode should production use?
 
-Start with:
-
-```env
-KNOWLEDGE_RETRIEVER=chroma
-```
-
-Then move to:
+Use the current production default:
 
 ```env
-KNOWLEDGE_RETRIEVER=lightrag_with_chroma_fallback
+KNOWLEDGE_RETRIEVER=lightrag
 ```
 
-Only use pure `lightrag` after the full chain is stable.
+AI customer-service KB retrieval, reindex, and delete now run through LightRAG. Chroma is no longer part of the current production retrieval chain.
+
+Older documents or private env files may mention `chroma` or `lightrag_with_chroma_fallback`. Those were cutover modes used during the Chroma-to-LightRAG migration and should not be selected for current deployments.
+
+If an older environment still has a historical value, change it to `KNOWLEDGE_RETRIEVER=lightrag`, confirm LightRAG/PostgreSQL/Neo4j are healthy, and reindex the KB if needed.
 
 ## Why does LightRAG need its own env file?
 
@@ -41,12 +39,18 @@ Because it needs its own API auth, PostgreSQL credentials, graph settings, and e
 
 `prepare_lightrag_env.sh` copies the shared values that should match `ai-service.env`, but it does not guess your server passwords.
 
-## What is the fastest rollback if AI retrieval becomes unstable?
+## What should I check if AI retrieval becomes unstable?
 
-1. Set `KNOWLEDGE_RETRIEVER=chroma`
-2. Restart only `ai-service`
+Do not roll back to Chroma for current production deployments. Chroma is not in the running retrieval path.
 
-That keeps the rest of the deployment unchanged.
+Check these first:
+
+1. LightRAG health and logs
+2. PostgreSQL and Neo4j connectivity
+3. `LIGHTRAG_API_KEY`, `LIGHTRAG_BASE_URL`, and `LIGHTRAG_DOC_REGISTRY_PATH`
+4. Whether the KB needs reindexing after a data or registry change
+
+After fixing the dependency or configuration issue, restart `ai-service` and LightRAG as needed.
 
 ## Can embeddings run on another server?
 
