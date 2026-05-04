@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
 
+import AdminLayout from '../components/admin/AdminLayout.vue'
 import CustomerServiceLogs from '../components/kb/CustomerServiceLogs.vue'
+import CustomerServiceTester from '../components/kb/CustomerServiceTester.vue'
 import KbChunkPreview from '../components/kb/KbChunkPreview.vue'
 import KbDocumentForm from '../components/kb/KbDocumentForm.vue'
 import KbHitLogs from '../components/kb/KbHitLogs.vue'
@@ -12,7 +13,6 @@ import UiButton from '../components/ui/UiButton.vue'
 import UiEmptyState from '../components/ui/UiEmptyState.vue'
 import UiErrorPanel from '../components/ui/UiErrorPanel.vue'
 import UiInput from '../components/ui/UiInput.vue'
-import UiPageHeader from '../components/ui/UiPageHeader.vue'
 import {
   batchIndexKbDocuments,
   chunkKbDocument,
@@ -40,11 +40,8 @@ import {
   uploadKbDocument,
 } from '../lib/knowledgeBase'
 import { useToastStore } from '../stores/toast'
-import { useAdminAuthStore } from '../stores/adminAuth'
 
 const toast = useToastStore()
-const router = useRouter()
-const adminAuth = useAdminAuthStore()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -58,6 +55,7 @@ const batchLimitText = ref('')
 const batchSummary = ref('')
 const missesLoading = ref(false)
 const csLogsLoading = ref(false)
+const creatingTesterDraft = ref(false)
 const syncHealthLoading = ref(false)
 const missStatus = ref('open')
 const missKeyword = ref('')
@@ -337,14 +335,26 @@ const formatTime = (value?: string | null) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }
 
-const handleAdminLogout = async () => {
-  adminAuth.logout()
-  toast.push({ type: 'info', message: '已退出管理员后台' })
-  await router.replace({ name: 'adminLogin' })
-}
-
 const handleFilterSearch = () => {
   refreshDocumentsAndHealth(selectedId.value)
+}
+
+const handleCreateTesterDraft = async (payload: { title: string; category: string; contentText: string }) => {
+  creatingTesterDraft.value = true
+  try {
+    const created = await createKbDocument(payload)
+    toast.push({ type: 'success', message: '知识库草稿已创建，请确认后切分并索引' })
+    await refreshDocumentsAndHealth(created.id)
+    await loadMisses()
+  } catch (error: any) {
+    toast.push({ type: 'error', message: error?.message || '创建草稿失败' })
+  } finally {
+    creatingTesterDraft.value = false
+  }
+}
+
+const handleTesterFinished = async () => {
+  await Promise.all([loadCustomerServiceLogs(), loadMisses()])
 }
 
 const handleFilterReset = () => {
@@ -362,14 +372,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page">
-    <UiPageHeader title="知识库管理" :show-back="false">
-      <template #right>
-        <UiButton size="sm" @click="handleAdminLogout">退出后台</UiButton>
-      </template>
-    </UiPageHeader>
-
-    <main class="main">
+  <AdminLayout title="知识库管理" subtitle="文档上传、切分预览、索引记录与命中日志">
+    <div class="main">
       <section class="filters panel">
         <div class="filter-grid">
           <UiInput v-model="filters.category" placeholder="按分类筛选" />
@@ -517,6 +521,13 @@ onMounted(() => {
 
       <KbHitLogs :hits="hits" />
 
+      <CustomerServiceTester
+        :selected-document="selectedDocument"
+        :creating-draft="creatingTesterDraft"
+        @create-draft="handleCreateTesterDraft"
+        @test-finished="handleTesterFinished"
+      />
+
       <CustomerServiceLogs :logs="customerServiceLogs" :loading="csLogsLoading">
         <template #actions>
           <div class="miss-actions">
@@ -537,20 +548,14 @@ onMounted(() => {
           </div>
         </template>
       </KbMissLogs>
-    </main>
-  </div>
+    </div>
+  </AdminLayout>
 </template>
 
 <style scoped>
-.page {
-  min-height: 100svh;
-  background: var(--code-bg);
-}
-
 .main {
   display: grid;
   gap: 16px;
-  padding: 20px 16px 40px;
 }
 
 .panel {

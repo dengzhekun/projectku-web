@@ -3,6 +3,7 @@ package com.web.dto;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class CustomerServiceChatResponse {
 
@@ -14,6 +15,7 @@ public class CustomerServiceChatResponse {
     private List<CustomerServiceAction> actions = new ArrayList<>();
     private List<CustomerServiceHitLog> hitLogs = new ArrayList<>();
     private String fallbackReason;
+    private Map<String, Object> retrievalTrace;
 
     public String getAnswer() {
         return answer;
@@ -77,5 +79,13 @@ public class CustomerServiceChatResponse {
 
     public void setFallbackReason(String fallbackReason) {
         this.fallbackReason = fallbackReason;
+    }
+
+    public Map<String, Object> getRetrievalTrace() {
+        return retrievalTrace;
+    }
+
+    public void setRetrievalTrace(Map<String, Object> retrievalTrace) {
+        this.retrievalTrace = retrievalTrace;
     }
 }

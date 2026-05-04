@@ -6,6 +6,8 @@ import com.web.pojo.Order;
 import com.web.pojo.Payment;
 import com.web.service.OrderService;
 import com.web.service.WalletService;
+import com.web.service.payment.AlipayPaymentGateway;
+import com.web.service.payment.WechatPaymentGateway;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -37,6 +39,12 @@ class PaymentServiceImplTest {
 
     @Mock
     private WalletService walletService;
+
+    @Mock
+    private AlipayPaymentGateway alipayPaymentGateway;
+
+    @Mock
+    private WechatPaymentGateway wechatPaymentGateway;
 
     @InjectMocks
     private PaymentServiceImpl paymentService;
@@ -90,7 +98,80 @@ class PaymentServiceImplTest {
     }
 
     @Test
-    void failedWebhookCancelsPendingOrder() {
+    void initiateExternalPaymentReusesExistingPendingPaymentForSameChannel() {
+        Order order = new Order();
+        order.setId(9L);
+        order.setUserId(3L);
+        order.setPayAmount(new BigDecimal("88.50"));
+        order.setStatus(0);
+        when(orderService.getOrderById(9L)).thenReturn(order);
+
+        Payment pending = new Payment();
+        pending.setOrderId(9L);
+        pending.setTradeId("TRD_OLD");
+        pending.setChannel("alipay");
+        pending.setAmount(new BigDecimal("88.50"));
+        pending.setStatus("PENDING");
+        when(paymentMapper.getByOrderId(9L)).thenReturn(pending);
+
+        Map<String, Object> result = paymentService.initiatePayment(3L, 9L, "alipay");
+
+        assertEquals("PENDING", result.get("status"));
+        assertEquals("TRD_OLD", result.get("tradeId"));
+        assertEquals("alipay", result.get("channel"));
+        verify(paymentMapper, never()).insert(any());
+    }
+
+    @Test
+    void initiateAlipayPaymentUsesGatewayPayload() {
+        Order order = new Order();
+        order.setId(9L);
+        order.setOrderNo("ORDER9");
+        order.setUserId(3L);
+        order.setPayAmount(new BigDecimal("88.50"));
+        order.setStatus(0);
+        when(orderService.getOrderById(9L)).thenReturn(order);
+        when(alipayPaymentGateway.createPagePay(any(Payment.class), eq(order)))
+                .thenReturn(Map.of(
+                        "mode", "mock",
+                        "paymentUrl", "https://openapi-sandbox.dl.alipaydev.com/gateway.do?mock=1",
+                        "payForm", "<form></form>"));
+
+        Map<String, Object> result = paymentService.initiatePayment(3L, 9L, "alipay");
+
+        assertEquals("PENDING", result.get("status"));
+        assertEquals("alipay", result.get("channel"));
+        assertEquals("mock", result.get("mode"));
+        assertEquals("<form></form>", result.get("payForm"));
+        verify(alipayPaymentGateway).createPagePay(any(Payment.class), eq(order));
+    }
+
+    @Test
+    void initiateWechatPaymentUsesGatewayPayload() {
+        Order order = new Order();
+        order.setId(9L);
+        order.setOrderNo("ORDER9");
+        order.setUserId(3L);
+        order.setPayAmount(new BigDecimal("88.50"));
+        order.setStatus(0);
+        when(orderService.getOrderById(9L)).thenReturn(order);
+        when(wechatPaymentGateway.createNativePay(any(Payment.class), eq(order)))
+                .thenReturn(Map.of(
+                        "mode", "mock",
+                        "codeUrl", "weixin://wxpay/mock/TRD1",
+                        "qr", "https://mock-payment-gateway.com/wechat/native/TRD1"));
+
+        Map<String, Object> result = paymentService.initiatePayment(3L, 9L, "wechat");
+
+        assertEquals("PENDING", result.get("status"));
+        assertEquals("wechat", result.get("channel"));
+        assertEquals("mock", result.get("mode"));
+        assertEquals("weixin://wxpay/mock/TRD1", result.get("codeUrl"));
+        verify(wechatPaymentGateway).createNativePay(any(Payment.class), eq(order));
+    }
+
+    @Test
+    void failedWebhookKeepsOrderPendingForRetry() {
         Payment payment = new Payment();
         payment.setOrderId(9L);
         payment.setTradeId("TRD123");
@@ -101,6 +182,90 @@ class PaymentServiceImplTest {
         boolean success = paymentService.handleWebhook("TRD123", "FAILED");
 
         assertEquals(true, success);
-        verify(orderService).updateOrderStatus(9L, 4);
+        verify(orderService, never()).updateOrderStatus(9L, 4);
+    }
+
+    @Test
+    void alipayNotifyRejectsInvalidSignatureWithoutUpdatingPayment() {
+        when(alipayPaymentGateway.verifyNotify(Map.of("out_trade_no", "TRD123"))).thenReturn(false);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> paymentService.handleAlipayNotify(Map.of("out_trade_no", "TRD123")));
+
+        assertEquals("PAYMENT_SIGNATURE_INVALID", exception.getCode());
+        verify(paymentMapper, never()).updateStatus(any(), any(), any());
+        verifyNoInteractions(orderService);
+    }
+
+    @Test
+    void alipayNotifyRejectsAmountMismatch() {
+        Map<String, String> params = Map.of(
+                "out_trade_no", "TRD123",
+                "total_amount", "88.49",
+                "trade_status", "TRADE_SUCCESS");
+        when(alipayPaymentGateway.verifyNotify(params)).thenReturn(true);
+
+        Payment payment = new Payment();
+        payment.setOrderId(9L);
+        payment.setTradeId("TRD123");
+        payment.setChannel("alipay");
+        payment.setAmount(new BigDecimal("88.50"));
+        payment.setStatus("PENDING");
+        when(paymentMapper.getByTradeId("TRD123")).thenReturn(payment);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> paymentService.handleAlipayNotify(params));
+
+        assertEquals("PAYMENT_AMOUNT_MISMATCH", exception.getCode());
+        verify(paymentMapper, never()).updateStatus(any(), any(), any());
+        verify(orderService, never()).updateOrderStatus(any(), any());
+    }
+
+    @Test
+    void alipayNotifyMarksPendingPaymentSuccessWhenVerifiedAndAmountMatches() {
+        Map<String, String> params = Map.of(
+                "out_trade_no", "TRD123",
+                "total_amount", "88.50",
+                "trade_status", "TRADE_SUCCESS");
+        when(alipayPaymentGateway.verifyNotify(params)).thenReturn(true);
+
+        Payment payment = new Payment();
+        payment.setOrderId(9L);
+        payment.setTradeId("TRD123");
+        payment.setChannel("alipay");
+        payment.setAmount(new BigDecimal("88.50"));
+        payment.setStatus("PENDING");
+        when(paymentMapper.getByTradeId("TRD123")).thenReturn(payment);
+        when(paymentMapper.updateStatus(eq("TRD123"), eq("SUCCESS"), any())).thenReturn(1);
+
+        boolean result = paymentService.handleAlipayNotify(params);
+
+        assertEquals(true, result);
+        verify(orderService).updateOrderStatus(9L, 1);
+    }
+
+    @Test
+    void alipayNotifyIsIdempotentForAlreadyProcessedPayment() {
+        Map<String, String> params = Map.of(
+                "out_trade_no", "TRD123",
+                "total_amount", "88.50",
+                "trade_status", "TRADE_SUCCESS");
+        when(alipayPaymentGateway.verifyNotify(params)).thenReturn(true);
+
+        Payment payment = new Payment();
+        payment.setOrderId(9L);
+        payment.setTradeId("TRD123");
+        payment.setChannel("alipay");
+        payment.setAmount(new BigDecimal("88.50"));
+        payment.setStatus("SUCCESS");
+        when(paymentMapper.getByTradeId("TRD123")).thenReturn(payment);
+
+        boolean result = paymentService.handleAlipayNotify(params);
+
+        assertEquals(true, result);
+        verify(paymentMapper, never()).updateStatus(any(), any(), any());
+        verify(orderService, never()).updateOrderStatus(any(), any());
     }
 }

@@ -69,9 +69,33 @@ function Get-RegressionCases {
             AllowNonNullFallbackReason = $true
         },
         @{
+            Name = "apple-15-concrete-product-price";
+            Message = (Decode-Utf8Base64 "6Iu55p6cMTXlpJrlsJHpkrE=");
+            AnswerMustContainAny = @((Decode-Utf8Base64 "aVBob25lIDE1"), (Decode-Utf8Base64 "6Iu55p6cMTU="), (Decode-Utf8Base64 "5a6e6ZmF5Lu35qC8"));
+            ExpectedRoute = "product";
+            ExpectedSourceType = "product";
+            AllowNonNullFallbackReason = $true
+        },
+        @{
+            Name = "apple-15-pro-variant-clarification";
+            Message = (Decode-Utf8Base64 "6Iu55p6cMTVQcm/lpJrlsJHpkrE=");
+            AnswerMustContainAny = @((Decode-Utf8Base64 "5YaF5a2Y"), (Decode-Utf8Base64 "6KeE5qC8"), (Decode-Utf8Base64 "5a656YeP"));
+            ExpectedRoute = "product";
+            ExpectedSourceType = "product";
+            AllowNonNullFallbackReason = $true
+        },
+        @{
             Name = "after-sales-quality-return-shipping";
             Message = (Decode-Utf8Base64 "5ZSu5ZCO6LSo6YeP6Zeu6aKY6YCA5Zue6L+Q6LS56LCB5om/5ouF");
             AnswerMustContainAny = @((Decode-Utf8Base64 "5ZWG5a625om/5ouF"), (Decode-Utf8Base64 "6L+Q6LS56YCa5bi455Sx5ZWG5a625om/5ouF"));
+            ExpectedRoute = "after_sales";
+            ExpectedSourceType = "knowledge";
+            RequireNullFallbackReason = $true
+        },
+        @{
+            Name = "after-sales-eligible-order-status";
+            Message = (Decode-Utf8Base64 "5LuA5LmI6K6i5Y2V5Y+v5Lul55Sz6K+35ZSu5ZCO");
+            AnswerMustContainAny = @((Decode-Utf8Base64 "5bey5pSv5LuY"), (Decode-Utf8Base64 "5bey5Y+R6LSn"), (Decode-Utf8Base64 "5bey5a6M5oiQ"));
             ExpectedRoute = "after_sales";
             ExpectedSourceType = "knowledge";
             RequireNullFallbackReason = $true
@@ -87,6 +111,22 @@ function Get-RegressionCases {
             Message = (Decode-Utf8Base64 "54mp5rWB5LiA55u05LiN5Yqo5oCO5LmI5Yqe");
             AnswerMustContainAny = @((Decode-Utf8Base64 "54mp5rWB"));
             ExpectedRoute = "logistics"
+        },
+        @{
+            Name = "wallet-login-required";
+            Message = (Decode-Utf8Base64 "5oiR55qE5L2Z6aKd5piv5aSa5bCR");
+            AnswerMustContainAny = @((Decode-Utf8Base64 "55m75b2V"));
+            ExpectedRoute = "wallet";
+            ExpectedSourceType = "business";
+            AllowNonNullFallbackReason = $true
+        },
+        @{
+            Name = "order-login-required";
+            Message = (Decode-Utf8Base64 "5oiR55qE6K6i5Y2V5Yiw5ZOq5LqG");
+            AnswerMustContainAny = @((Decode-Utf8Base64 "55m75b2V"));
+            ExpectedRoute = "order";
+            ExpectedSourceType = "business";
+            AllowNonNullFallbackReason = $true
         }
     )
 

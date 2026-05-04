@@ -43,8 +43,33 @@ class AuthInterceptorTest {
         assertEquals(1L, AuthInterceptor.getCurrentUserId());
     }
 
+    @Test
+    void nonAdminUserCannotAccessAdminApi() {
+        MockHttpServletRequest request = adminRequestWithToken(tokenFor(12L, "user@example.com"));
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> interceptor.preHandle(request, response, null));
+
+        assertEquals("FORBIDDEN", exception.getCode());
+    }
+
+    @Test
+    void adminUserCanAccessAdminApi() {
+        MockHttpServletRequest request = adminRequestWithToken(tokenFor(1L, "admin"));
+
+        assertDoesNotThrow(() -> interceptor.preHandle(request, response, null));
+        assertEquals(1L, AuthInterceptor.getCurrentUserId());
+    }
+
     private MockHttpServletRequest kbRequestWithToken(String token) {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/v1/kb/documents");
+        request.addHeader("Authorization", "Bearer " + token);
+        return request;
+    }
+
+    private MockHttpServletRequest adminRequestWithToken(String token) {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/v1/admin/payments/overview");
         request.addHeader("Authorization", "Bearer " + token);
         return request;
     }

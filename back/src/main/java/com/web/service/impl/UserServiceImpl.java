@@ -56,4 +56,33 @@ public class UserServiceImpl implements UserService {
     public User getUserById(Long id) {
         return userMapper.getById(id);
     }
+
+    @Override
+    public User getUserByAccount(String account) {
+        if (account == null || account.isBlank()) {
+            return null;
+        }
+        return userMapper.getByAccount(account.trim());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void resetPassword(String account, String newPassword) {
+        if (account == null || account.isBlank()) {
+            throw new BusinessException("VALIDATION_FAILED", "账号不能为空");
+        }
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new BusinessException("VALIDATION_FAILED", "密码长度至少 6 位");
+        }
+
+        User user = userMapper.getByAccount(account.trim());
+        if (user == null) {
+            throw new BusinessException("USER_NOT_FOUND", "账号不存在");
+        }
+        user.setPassword(DigestUtil.md5Hex(newPassword));
+        int updated = userMapper.updatePassword(user);
+        if (updated != 1) {
+            throw new BusinessException("USER_NOT_FOUND", "账号不存在");
+        }
+    }
 }

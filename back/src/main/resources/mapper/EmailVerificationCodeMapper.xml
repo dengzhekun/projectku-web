@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.web.mapper.EmailVerificationCodeMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO email_verification_code(
+            email, purpose, code_hash, expires_at, attempt_count, send_ip, created_at, updated_at
+        )
+        VALUES (
+            #{email}, #{purpose}, #{codeHash}, #{expiresAt}, #{attemptCount}, #{sendIp}, NOW(), NOW()
+        )
+    </insert>
+
+    <select id="findLatestUsable" resultType="com.web.pojo.EmailVerificationCode">
+        SELECT *
+        FROM email_verification_code
+        WHERE email = #{email}
+          AND purpose = #{purpose}
+          AND used_at IS NULL
+          AND expires_at &gt; #{now}
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select id="countCreatedSince" resultType="int">
+        SELECT COUNT(*)
+        FROM email_verification_code
+        WHERE email = #{email}
+          AND purpose = #{purpose}
+          AND created_at &gt;= #{since}
+    </select>
+
+    <update id="markUsed">
+        UPDATE email_verification_code
+        SET used_at = NOW(), updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="incrementAttemptCount">
+        UPDATE email_verification_code
+        SET attempt_count = attempt_count + 1, updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+</mapper>

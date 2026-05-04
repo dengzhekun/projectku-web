@@ -15,4 +15,28 @@
         LIMIT 50
     </select>
 
+    <select id="adminWalletStats" resultType="map">
+        SELECT
+            COUNT(*) AS totalWalletTransactions,
+            COALESCE(SUM(CASE WHEN type = 'PAYMENT' THEN amount ELSE 0 END), 0) AS walletPaymentAmount,
+            COALESCE(SUM(CASE WHEN type = 'REGISTRATION_BONUS' THEN amount ELSE 0 END), 0) AS registrationBonusAmount
+        FROM wallet_transactions
+    </select>
+
+    <select id="adminRecentWalletTransactions" resultType="map">
+        SELECT
+            id,
+            user_id AS userId,
+            order_id AS orderId,
+            trade_id AS tradeId,
+            type,
+            amount,
+            balance_after AS balanceAfter,
+            remark,
+            create_time AS createTime
+        FROM wallet_transactions
+        ORDER BY create_time DESC
+        LIMIT #{limit}
+    </select>
+
 </mapper>

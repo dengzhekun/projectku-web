@@ -18,7 +18,7 @@ const submitting = ref(false)
 
 const redirectTo = computed(() => {
   const raw = route.query.redirect
-  return typeof raw === 'string' && raw.startsWith('/admin') ? raw : '/admin/kb'
+  return typeof raw === 'string' && raw.startsWith('/admin') ? raw : '/admin'
 })
 
 const canSubmit = computed(() => account.value.trim().length > 0 && password.value.length >= 6 && !submitting.value)
@@ -54,8 +54,8 @@ const goHome = () => {
       <section class="card" aria-label="管理员登录表单">
         <div class="hero">
           <div class="eyebrow">Admin MVP</div>
-          <h1>知识库管理后台</h1>
-          <p>用于 AI 客服知识库的数据准备、文档切分、向量入库、索引记录和命中日志查看。</p>
+          <h1>统一管理后台</h1>
+          <p>用于管理 AI 客服知识库、LightRAG 同步、支付订单看板和运营排障入口。</p>
         </div>
 
         <form class="form" @submit.prevent="submit">
@@ -77,7 +77,7 @@ const goHome = () => {
         </form>
 
         <div class="tip">
-          默认后台账号 <strong>admin</strong>，默认密码 <strong>123456</strong>。登录会获取后端令牌，用于访问知识库接口。
+          默认后台账号 <strong>admin</strong>，默认密码 <strong>123456</strong>。登录会获取后端令牌，用于访问后台接口。
         </div>
       </section>
     </main>

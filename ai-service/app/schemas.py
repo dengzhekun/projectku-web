@@ -29,6 +29,22 @@ class HitLog(BaseModel):
     chunkId: int
 
 
+class RetrievalTrace(BaseModel):
+    route: Optional[str] = None
+    sourceType: Optional[str] = None
+    retriever: Optional[str] = None
+    requestedTopK: Optional[int] = None
+    returnedChunkCount: int = 0
+    selectedChunkCount: int = 0
+    citationCount: int = 0
+    hitLogCount: int = 0
+    attributionStatus: str = "none"
+    selectedCategories: list[str] = Field(default_factory=list)
+    selectedSourceIds: list[str] = Field(default_factory=list)
+    fallbackReason: Optional[str] = None
+    notes: list[str] = Field(default_factory=list)
+
+
 class ChatResponse(BaseModel):
     answer: str
     confidence: Optional[float] = None
@@ -38,6 +54,7 @@ class ChatResponse(BaseModel):
     actions: list[Action] = Field(default_factory=list)
     hitLogs: list[HitLog] = Field(default_factory=list)
     fallbackReason: Optional[str] = None
+    retrievalTrace: Optional[RetrievalTrace] = None
 
 
 class IndexChunk(BaseModel):

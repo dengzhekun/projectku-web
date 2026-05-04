@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Ecommerce Maintainer"
+  short_description: "Maintain and improve AI-enabled ecommerce platforms."
+  default_prompt: "Use this skill to inspect, maintain, test, and safely deploy an AI-enabled ecommerce project with customer service, RAG knowledge base, products, orders, payments, coupons, and inventory."

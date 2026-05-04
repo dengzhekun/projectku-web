@@ -4,6 +4,9 @@ import com.web.pojo.Payment;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+import java.util.Map;
+
 @Mapper
 public interface PaymentMapper {
     Payment getByOrderId(Long orderId);
@@ -17,4 +20,8 @@ public interface PaymentMapper {
     int updatePendingStatusByOrderId(@Param("orderId") Long orderId,
                                      @Param("status") String status,
                                      @Param("paidAt") java.time.LocalDateTime paidAt);
+
+    Map<String, Object> adminPaymentStats();
+
+    List<Map<String, Object>> adminRecentPayments(@Param("limit") int limit);
 }

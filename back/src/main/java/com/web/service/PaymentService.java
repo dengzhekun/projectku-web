@@ -25,4 +25,9 @@ public interface PaymentService {
      * @param status 支付结果 (SUCCESS / FAILED)
      */
     boolean handleWebhook(String tradeId, String status);
+
+    /**
+     * 处理支付宝异步回调。必须在验签通过、金额和渠道校验通过后才能更新订单。
+     */
+    boolean handleAlipayNotify(Map<String, String> params);
 }

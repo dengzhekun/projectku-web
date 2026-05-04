@@ -6,6 +6,7 @@ param(
   [switch]$InitDb,
   [switch]$InstallAiDeps,
   [switch]$SeedAiKb,
+  [switch]$SkipEmbeddingServer,
   [switch]$SkipAiDependencyInstall,
   [switch]$SkipKbSeed,
   [switch]$Portable
@@ -21,6 +22,26 @@ $LogsDir = Join-Path $Root "logs"
 $PidsDir = Join-Path $Root ".pids"
 
 New-Item -ItemType Directory -Force -Path $LogsDir, $PidsDir | Out-Null
+
+function Import-EnvFile([string]$Path) {
+  if (-not (Test-Path $Path)) { return }
+  Get-Content -LiteralPath $Path | ForEach-Object {
+    $line = $_.Trim()
+    if (-not $line -or $line.StartsWith("#")) { return }
+    $idx = $line.IndexOf("=")
+    if ($idx -le 0) { return }
+    $name = $line.Substring(0, $idx).Trim()
+    $value = $line.Substring($idx + 1).Trim()
+    if (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+      $value = $value.Substring(1, $value.Length - 2)
+    }
+    if ($name -match '^[A-Za-z_][A-Za-z0-9_]*$') {
+      [Environment]::SetEnvironmentVariable($name, $value, "Process")
+    }
+  }
+}
+
+Import-EnvFile (Join-Path $Root "deploy\prod.env")
 
 function Test-Command([string]$Name) {
   return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
@@ -92,8 +113,24 @@ function Start-DatabaseIfNeeded {
   }
 }
 
+function Start-EmbeddingServerIfNeeded {
+  if ($SkipEmbeddingServer) { return }
+  if (Test-Port 9001) {
+    Write-Host "Embedding server already listening on 9001."
+    return
+  }
+  $embeddingScript = Join-Path $Root "scripts\local_embedding_server.py"
+  if (-not (Test-Path $embeddingScript)) {
+    Write-Warning "Embedding server script not found: $embeddingScript"
+    return
+  }
+  if (-not (Test-Command "python")) { throw "python not found" }
+  Start-Window "embedding-server" $Root "python scripts/local_embedding_server.py"
+}
+
 function Start-Dev {
   Start-DatabaseIfNeeded
+  Start-EmbeddingServerIfNeeded
   $doInstallAiDeps = $InstallAiDeps -and (-not $SkipAiDependencyInstall)
   $doSeedAiKb = $SeedAiKb -and (-not $SkipKbSeed)
 
@@ -131,9 +168,10 @@ function Start-Dev {
   }
 
   Start-Window "backend" $BackendDir "mvn spring-boot:run"
-  $aiCommand = "python -m uvicorn app.main:app --host 127.0.0.1 --port 9000 --reload 2>&1"
+  $aiEnvPrefix = "`$env:AI_EMBEDDING_REMOTE_URL='http://127.0.0.1:9001/embed'; `$env:LIGHTRAG_BASE_URL='http://127.0.0.1:19621'; `$env:NEO4J_URI='bolt://127.0.0.1:7687'; "
+  $aiCommand = $aiEnvPrefix + "python -m uvicorn app.main:app --host 127.0.0.1 --port 9000 --reload 2>&1"
   if ($Portable) {
-    $aiCommand = "python -m uvicorn app.main:app --host 127.0.0.1 --port 9000 2>&1"
+    $aiCommand = $aiEnvPrefix + "python -m uvicorn app.main:app --host 127.0.0.1 --port 9000 2>&1"
   }
   Start-Window "ai-service" $AiServiceDir $aiCommand
   Start-Window "frontend" $FrontendDir "npm run dev -- --host 127.0.0.1"

@@ -28,7 +28,7 @@ from app.retrieval.context_formatter import merge_context
 from app.retrieval.knowledge_retriever import KnowledgeRetriever, build_knowledge_retriever
 from app.retrieval.neo4j_retriever import Neo4jRetriever, format_graph_context
 from app.safety.guardrails import strip_think_tags
-from app.schemas import ChatRequest, ChatResponse, Citation, HitLog
+from app.schemas import ChatRequest, ChatResponse, Citation, HitLog, RetrievalTrace
 
 router = APIRouter()
 
@@ -151,6 +151,72 @@ def filter_latest_kb_versions(chunks: list[dict]) -> list[dict]:
 
 def build_attribution_chunks(chunks: list[dict]) -> list[dict]:
     return chunks
+
+
+def _unique_metadata_values(chunks: list[dict], key: str) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for chunk in chunks:
+        metadata = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
+        value = metadata.get(key)
+        if value is None:
+            continue
+        normalized = str(value).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        values.append(normalized)
+    return values
+
+
+def build_retrieval_trace(
+    *,
+    route: str,
+    source_type: str,
+    raw_chunks: list[dict],
+    selected_chunks: list[dict],
+    citations: list[Citation],
+    hit_logs: list[HitLog],
+    fallback_reason: str | None,
+    requested_top_k: int,
+) -> RetrievalTrace:
+    notes: list[str] = []
+    selected_source_ids = _unique_metadata_values(selected_chunks, "source_id")
+    selected_categories = _unique_metadata_values(selected_chunks, "category")
+
+    if hit_logs:
+        attribution_status = "chunk_level"
+    elif any(citation.sourceType == "lightrag" and citation.sourceId == "answer" for citation in citations):
+        attribution_status = "answer_level"
+    elif selected_chunks or citations:
+        attribution_status = "source_level"
+    else:
+        attribution_status = "none"
+
+    if selected_chunks and not hit_logs:
+        notes.append(
+            "LightRAG returned answer/source-level evidence without numeric document/chunk metadata; chunk hit logging is degraded."
+        )
+    if raw_chunks and not selected_chunks:
+        notes.append("Knowledge chunks were retrieved but filtered out by category/version reranking.")
+    if not raw_chunks:
+        notes.append("No knowledge chunks were returned by the active retriever.")
+
+    return RetrievalTrace(
+        route=route,
+        sourceType=source_type,
+        retriever="lightrag",
+        requestedTopK=requested_top_k,
+        returnedChunkCount=len(raw_chunks),
+        selectedChunkCount=len(selected_chunks),
+        citationCount=len(citations),
+        hitLogCount=len(hit_logs),
+        attributionStatus=attribution_status,
+        selectedCategories=selected_categories,
+        selectedSourceIds=selected_source_ids,
+        fallbackReason=fallback_reason,
+        notes=notes,
+    )
 
 
 def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
@@ -580,8 +646,10 @@ def handle_chat(request: ChatRequest) -> ChatResponse:
             fallbackReason=None,
         )
 
+    requested_top_k = 20
     try:
-        chunks = rerank_chunks_for_message(message, get_knowledge_retriever().query(message, top_k=20), limit=6)
+        raw_chunks = get_knowledge_retriever().query(message, top_k=requested_top_k)
+        chunks = rerank_chunks_for_message(message, raw_chunks, limit=6)
     except Exception:
         return knowledge_retrieval_unavailable_response(route)
     graph_rows = get_neo4j_retriever().lookup_product_policy(message)
@@ -599,6 +667,16 @@ def handle_chat(request: ChatRequest) -> ChatResponse:
     attribution_chunks = build_attribution_chunks(chunks)
     citations = build_citations(attribution_chunks)
     hit_logs = build_hit_logs(attribution_chunks)
+    retrieval_trace = build_retrieval_trace(
+        route=route,
+        source_type="knowledge",
+        raw_chunks=raw_chunks,
+        selected_chunks=attribution_chunks,
+        citations=citations,
+        hit_logs=hit_logs,
+        fallback_reason=fallback_reason,
+        requested_top_k=requested_top_k,
+    )
 
     if not settings.ai_llm_api_key or settings.ai_llm_api_key.startswith("replace_"):
         return ChatResponse(
@@ -610,6 +688,7 @@ def handle_chat(request: ChatRequest) -> ChatResponse:
             actions=[],
             hitLogs=hit_logs,
             fallbackReason="This response is a local configuration reminder, not an LLM answer.",
+            retrievalTrace=retrieval_trace,
         )
 
     answer = strip_think_tags(get_llm_client().chat(prompt))
@@ -622,6 +701,7 @@ def handle_chat(request: ChatRequest) -> ChatResponse:
         actions=[],
         hitLogs=hit_logs,
         fallbackReason=fallback_reason,
+        retrievalTrace=retrieval_trace,
     )
 
 
@@ -733,8 +813,10 @@ def handle_chat_stream(request: ChatRequest):
         }
         return
 
+    requested_top_k = 20
     try:
-        chunks = rerank_chunks_for_message(message, get_knowledge_retriever().query(message, top_k=20), limit=6)
+        raw_chunks = get_knowledge_retriever().query(message, top_k=requested_top_k)
+        chunks = rerank_chunks_for_message(message, raw_chunks, limit=6)
     except Exception:
         response = knowledge_retrieval_unavailable_response(route)
         yield {"type": "delta", "text": response.answer}
@@ -755,6 +837,16 @@ def handle_chat_stream(request: ChatRequest):
     attribution_chunks = build_attribution_chunks(chunks)
     citations = build_citations(attribution_chunks)
     hit_logs = build_hit_logs(attribution_chunks)
+    retrieval_trace = build_retrieval_trace(
+        route=route,
+        source_type="knowledge",
+        raw_chunks=raw_chunks,
+        selected_chunks=attribution_chunks,
+        citations=citations,
+        hit_logs=hit_logs,
+        fallback_reason=fallback_reason,
+        requested_top_k=requested_top_k,
+    )
 
     if not settings.ai_llm_api_key or settings.ai_llm_api_key.startswith("replace_"):
         answer = "AI customer service is not configured. Set AI_LLM_API_KEY first."
@@ -770,6 +862,7 @@ def handle_chat_stream(request: ChatRequest):
                 actions=[],
                 hitLogs=hit_logs,
                 fallbackReason="This response is a local configuration reminder, not an LLM answer.",
+                retrievalTrace=retrieval_trace,
             ).model_dump(),
         }
         return
@@ -791,6 +884,7 @@ def handle_chat_stream(request: ChatRequest):
             actions=[],
             hitLogs=hit_logs,
             fallbackReason=fallback_reason,
+            retrievalTrace=retrieval_trace,
         ).model_dump(),
     }
 

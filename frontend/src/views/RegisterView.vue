@@ -14,7 +14,7 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 
-const mode = ref<Mode>('phone')
+const mode = ref<Mode>('email')
 const phone = ref('')
 const email = ref('')
 const code = ref('')
@@ -47,6 +47,7 @@ const confirmOk = computed(() => confirmPassword.value.length > 0 && confirmPass
 const codeOk = computed(() => /^\d{4,8}$/.test(code.value.trim()))
 
 const canSendCode = computed(() => {
+  if (mode.value !== 'email') return false
   if (!accountOk.value) return false
   if (codeState.value.sending || codeState.value.secondsLeft > 0) return false
   return true
@@ -55,7 +56,10 @@ const canSendCode = computed(() => {
 const canSubmit = computed(() => {
   if (submitState.value === 'submitting') return false
   if (!agree.value) return false
-  return accountOk.value && codeOk.value && passwordOk.value && confirmOk.value
+  if (mode.value === 'email') {
+    return accountOk.value && codeOk.value && passwordOk.value && confirmOk.value
+  }
+  return accountOk.value && passwordOk.value && confirmOk.value
 })
 
 const setMode = (next: Mode) => {
@@ -77,9 +81,19 @@ const sendCode = async () => {
   if (!canSendCode.value) return
   errorText.value = null
   codeState.value = { sending: true, secondsLeft: 0 }
-  await new Promise((r) => window.setTimeout(r, 450))
-  codeState.value = { sending: false, secondsLeft: 60 }
-  window.setTimeout(tick, 1000)
+  try {
+    const res = await api.post('/v1/auth/email-code', { email: email.value.trim() })
+    const seconds = Number(res?.data?.data?.cooldownSeconds || 60)
+    codeState.value = { sending: false, secondsLeft: seconds }
+    window.setTimeout(tick, 1000)
+  } catch (e) {
+    const msg =
+      (e as any)?.response?.data?.error?.message ||
+      (e as any)?.message ||
+      '验证码发送失败，请稍后重试'
+    errorText.value = msg
+    codeState.value = { sending: false, secondsLeft: 0 }
+  }
 }
 
 const submit = async () => {
@@ -97,7 +111,12 @@ const submit = async () => {
         ? account.split('@')[0] || '用户'
         : account ? `用户${account.slice(-4)}` : '用户'
 
-    await api.post('/v1/auth/register', { account, password: password.value, nickname })
+    await api.post('/v1/auth/register', {
+      account,
+      password: password.value,
+      nickname,
+      emailCode: mode.value === 'email' ? code.value.trim() : undefined,
+    })
     await auth.loginWithAccount(account, password.value)
     await router.replace(redirectTo.value)
   } catch (e) {
@@ -132,7 +151,7 @@ const goPrivacy = () => {
       <section class="card" aria-label="注册表单">
         <div class="hero">
           <div class="heroTitle">创建企业账号</div>
-          <div class="heroSub">支持手机号 / 邮箱注册，注册后可同步消息、订单与优惠</div>
+          <div class="heroSub">邮箱验证码由后端校验，注册后可同步消息、订单与优惠</div>
         </div>
 
         <div class="tabs" role="tablist" aria-label="注册方式">
@@ -181,7 +200,7 @@ const goPrivacy = () => {
             />
           </div>
 
-          <div class="field">
+          <div v-if="mode === 'email'" class="field">
             <label class="label" for="code">验证码</label>
             <div class="row">
               <UiInput

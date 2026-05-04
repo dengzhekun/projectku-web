@@ -12,6 +12,19 @@ spring:
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          ssl:
+            enable: ${MAIL_SSL_ENABLE:false}
+          starttls:
+            enable: ${MAIL_STARTTLS_ENABLE:true}
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml
@@ -36,3 +49,36 @@ order:
     timeout-minutes: ${ORDER_TIMEOUT_MINUTES:30}
     batch-size: ${ORDER_CLEANUP_BATCH_SIZE:100}
     fixed-delay-ms: ${ORDER_CLEANUP_FIXED_DELAY_MS:60000}
+
+email:
+  verification:
+    mode: ${EMAIL_CODE_MODE:console}
+    code-length: ${EMAIL_CODE_LENGTH:6}
+    expires-minutes: ${EMAIL_CODE_EXPIRES_MINUTES:10}
+    resend-seconds: ${EMAIL_CODE_RESEND_SECONDS:60}
+    hourly-limit: ${EMAIL_CODE_HOURLY_LIMIT:5}
+    max-attempts: ${EMAIL_CODE_MAX_ATTEMPTS:5}
+    sender-name: ${EMAIL_SENDER_NAME:元气购}
+    subject-prefix: ${EMAIL_CODE_SUBJECT_PREFIX:元气购验证码}
+
+payment:
+  alipay:
+    mode: ${ALIPAY_MODE:mock}
+    gateway-url: ${ALIPAY_GATEWAY_URL:https://openapi-sandbox.dl.alipaydev.com/gateway.do}
+    app-id: ${ALIPAY_APP_ID:}
+    merchant-private-key: ${ALIPAY_MERCHANT_PRIVATE_KEY:}
+    alipay-public-key: ${ALIPAY_PUBLIC_KEY:}
+    notify-url: ${ALIPAY_NOTIFY_URL:}
+    return-url: ${ALIPAY_RETURN_URL:}
+    sign-type: ${ALIPAY_SIGN_TYPE:RSA2}
+    subject-prefix: ${ALIPAY_SUBJECT_PREFIX:元气购订单}
+  wechat:
+    mode: ${WECHAT_PAY_MODE:mock}
+    app-id: ${WECHAT_PAY_APP_ID:}
+    mch-id: ${WECHAT_PAY_MCH_ID:}
+    api-v3-key: ${WECHAT_PAY_API_V3_KEY:}
+    merchant-private-key: ${WECHAT_PAY_MERCHANT_PRIVATE_KEY:}
+    merchant-serial-no: ${WECHAT_PAY_MERCHANT_SERIAL_NO:}
+    notify-url: ${WECHAT_PAY_NOTIFY_URL:}
+    return-url: ${WECHAT_PAY_RETURN_URL:}
+    description-prefix: ${WECHAT_PAY_DESCRIPTION_PREFIX:元气购订单}

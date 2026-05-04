@@ -19,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.io.ByteArrayOutputStream;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -67,6 +68,9 @@ class CustomerServiceServiceImplTest {
         gatewayReply.setConfidence(new BigDecimal("0.92"));
         gatewayReply.setRoute("order");
         gatewayReply.setSourceType("business");
+        gatewayReply.setRetrievalTrace(Map.of(
+                "attributionStatus", "chunk_level",
+                "selectedSourceIds", List.of("kb:5:3:1")));
 
         when(aiCustomerServiceClient.chat(any(CustomerServiceChatRequest.class))).thenReturn(gatewayReply);
 
@@ -75,6 +79,7 @@ class CustomerServiceServiceImplTest {
         CustomerServiceChatResponse response = customerServiceService.chat("Request refund", "conversation-1", token);
 
         assertEquals("Please check the order detail page first.", response.getAnswer());
+        assertEquals("chunk_level", response.getRetrievalTrace().get("attributionStatus"));
         ArgumentCaptor<CustomerServiceChatRequest> requestCaptor =
                 ArgumentCaptor.forClass(CustomerServiceChatRequest.class);
         verify(aiCustomerServiceClient).chat(requestCaptor.capture());

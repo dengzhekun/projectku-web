@@ -96,4 +96,10 @@ public class PaymentController {
                 .put("message", success ? "success" : "failed")
                 .build());
     }
+
+    @PostMapping(value = "/alipay/notify", consumes = "application/x-www-form-urlencoded")
+    public String alipayNotify(@RequestParam Map<String, String> params) {
+        boolean success = paymentService.handleAlipayNotify(params);
+        return success ? "success" : "failure";
+    }
 }

@@ -58,4 +58,29 @@ class UserServiceImplTest {
 
         assertEquals("VALIDATION_FAILED", exception.getCode());
     }
+
+    @Test
+    void resetPasswordUpdatesStoredPasswordHash() {
+        User user = new User();
+        user.setId(7L);
+        user.setAccount("user@example.com");
+        when(userMapper.getByAccount("user@example.com")).thenReturn(user);
+        when(userMapper.updatePassword(any(User.class))).thenReturn(1);
+
+        userService.resetPassword(" user@example.com ", "newpass123");
+
+        verify(userMapper).updatePassword(user);
+        assertEquals(cn.hutool.crypto.digest.DigestUtil.md5Hex("newpass123"), user.getPassword());
+    }
+
+    @Test
+    void resetPasswordRejectsMissingAccount() {
+        when(userMapper.getByAccount("missing@example.com")).thenReturn(null);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> userService.resetPassword("missing@example.com", "newpass123"));
+
+        assertEquals("USER_NOT_FOUND", exception.getCode());
+    }
 }

@@ -17,13 +17,32 @@ export type CustomerServiceHitLog = {
   chunkId: number
 }
 
+export type CustomerServiceRetrievalTrace = {
+  route?: string | null
+  sourceType?: string | null
+  retriever?: string | null
+  requestedTopK?: number | null
+  returnedChunkCount?: number
+  selectedChunkCount?: number
+  citationCount?: number
+  hitLogCount?: number
+  attributionStatus?: string
+  selectedCategories?: string[]
+  selectedSourceIds?: string[]
+  fallbackReason?: string | null
+  notes?: string[]
+}
+
 export type CustomerServiceReply = {
   answer: string
   confidence?: number | null
+  route?: string | null
+  sourceType?: string | null
   citations?: CustomerServiceCitation[]
   actions?: CustomerServiceAction[]
   hitLogs?: CustomerServiceHitLog[]
   fallbackReason?: string | null
+  retrievalTrace?: CustomerServiceRetrievalTrace | null
 }
 
 export const askCustomerService = async (message: string, conversationId?: string | null) => {

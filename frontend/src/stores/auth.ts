@@ -47,18 +47,26 @@ export const useAuthStore = defineStore('auth', () => {
   const loginWithAccount = async (account: string, password?: string) => {
     if (password && password.length >= 6) {
       const res = await api.post('/v1/auth/login', { account, password })
-      const data = res.data?.data
-      const token: string | null = data?.token ?? null
-      const expiresIn: number | null = data?.expiresIn ?? null
-      const u = data?.user ?? null
-      const expiresAt = expiresIn ? Date.now() + expiresIn * 1000 : null
-      snapshot.value = { v: 2, user: u, token, expiresAt }
-      setAuthToken(token)
+      applyLoginResponse(res.data?.data)
       return
     }
     const nickname = account.includes('@') ? account.split('@')[0] || '用户' : '用户'
     snapshot.value = { v: 2, user: { id: 'u_mock', nickname }, token: null, expiresAt: null }
     setAuthToken(null)
+  }
+
+  const loginWithEmailCode = async (account: string, emailCode: string) => {
+    const res = await api.post('/v1/auth/login-with-code', { account, emailCode })
+    applyLoginResponse(res.data?.data)
+  }
+
+  const applyLoginResponse = (data: any) => {
+    const token: string | null = data?.token ?? null
+    const expiresIn: number | null = data?.expiresIn ?? null
+    const u = data?.user ?? null
+    const expiresAt = expiresIn ? Date.now() + expiresIn * 1000 : null
+    snapshot.value = { v: 2, user: u, token, expiresAt }
+    setAuthToken(token)
   }
 
   const loginMock = () => loginWithAccount('user@example.com')
@@ -76,5 +84,5 @@ export const useAuthStore = defineStore('auth', () => {
     { deep: true },
   )
 
-  return { user, token, hasToken, isLoggedIn, loginWithAccount, loginMock, logout }
+  return { user, token, hasToken, isLoggedIn, loginWithAccount, loginWithEmailCode, loginMock, logout }
 })

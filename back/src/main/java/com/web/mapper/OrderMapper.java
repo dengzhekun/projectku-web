@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface OrderMapper {
@@ -25,4 +26,8 @@ public interface OrderMapper {
 
     List<Order> getExpiredPendingOrders(@Param("cutoff") LocalDateTime cutoff,
                                         @Param("limit") int limit);
+
+    Map<String, Object> adminOrderStats();
+
+    List<Map<String, Object>> adminRecentOrders(@Param("limit") int limit);
 }

@@ -32,4 +32,30 @@
         WHERE order_id = #{orderId} AND status = 'PENDING'
     </update>
 
+    <select id="adminPaymentStats" resultType="map">
+        SELECT
+            COUNT(*) AS totalPayments,
+            COALESCE(SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END), 0) AS pendingPayments,
+            COALESCE(SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END), 0) AS successPayments,
+            COALESCE(SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END), 0) AS failedPayments,
+            COALESCE(SUM(CASE WHEN status = 'SUCCESS' THEN amount ELSE 0 END), 0) AS paidAmount
+        FROM payments
+    </select>
+
+    <select id="adminRecentPayments" resultType="map">
+        SELECT
+            id,
+            order_id AS orderId,
+            trade_id AS tradeId,
+            channel,
+            amount,
+            status,
+            paid_at AS paidAt,
+            create_time AS createTime,
+            update_time AS updateTime
+        FROM payments
+        ORDER BY create_time DESC
+        LIMIT #{limit}
+    </select>
+
 </mapper>

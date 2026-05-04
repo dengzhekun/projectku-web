@@ -276,6 +276,84 @@ def test_handle_chat_degrades_safely_for_lightrag_answer_level_only_result(monke
     assert [(item.sourceType, item.sourceId, item.title) for item in response.citations] == [
         ("lightrag", "answer", "LightRAG answer")
     ]
+    assert response.retrievalTrace is not None
+    assert response.retrievalTrace.attributionStatus == "answer_level"
+    assert response.retrievalTrace.returnedChunkCount == 1
+    assert response.retrievalTrace.selectedChunkCount == 1
+    assert response.retrievalTrace.hitLogCount == 0
+    assert response.retrievalTrace.citationCount == 1
+    assert response.retrievalTrace.selectedSourceIds == ["answer"]
+    assert response.retrievalTrace.notes == [
+        "LightRAG returned answer/source-level evidence without numeric document/chunk metadata; chunk hit logging is degraded."
+    ]
+
+
+def test_handle_chat_records_chunk_level_retrieval_trace_for_knowledge_hits(monkeypatch):
+    class DummyRetriever:
+        def query(self, text: str, top_k: int = 6):
+            return [
+                {
+                    "document": "订单金额未达到优惠券最低门槛时，优惠券不能使用。",
+                    "metadata": {
+                        "source_type": "kb",
+                        "source_id": "kb:6:3:12",
+                        "title": "KB Coupon Rules",
+                        "document_id": 6,
+                        "chunk_id": 912,
+                        "category": "coupon",
+                        "version": 3,
+                    },
+                },
+                {
+                    "document": "物流信息长时间不更新时，可以先核对地址。",
+                    "metadata": {
+                        "source_type": "kb",
+                        "source_id": "kb:8:3:3",
+                        "title": "KB Logistics",
+                        "document_id": 8,
+                        "chunk_id": 933,
+                        "category": "logistics",
+                        "version": 3,
+                    },
+                },
+            ]
+
+    class DummyNeo4jRetriever:
+        def lookup_product_policy(self, text: str):
+            return []
+
+    class DummyLlmClient:
+        def chat(self, prompt: str):
+            return "订单金额未达到优惠券最低门槛时，优惠券不能使用。"
+
+    monkeypatch.setattr(
+        chat_api,
+        "get_settings",
+        lambda: SimpleNamespace(ai_cs_max_message_length=800, ai_llm_api_key="test-key"),
+    )
+    monkeypatch.setattr(chat_api, "is_product_query", lambda _: False)
+    monkeypatch.setattr(chat_api, "get_knowledge_retriever", lambda: DummyRetriever())
+    monkeypatch.setattr(chat_api, "get_neo4j_retriever", lambda: DummyNeo4jRetriever())
+    monkeypatch.setattr(chat_api, "get_llm_client", lambda: DummyLlmClient())
+    monkeypatch.setattr(chat_api, "build_customer_service_prompt", lambda **kwargs: kwargs["retrieved_context"])
+    monkeypatch.setattr(chat_api, "strip_think_tags", lambda text: text)
+
+    response = chat_api.handle_chat(ChatRequest(message="优惠券没到门槛为什么不能用？"))
+
+    assert response.hitLogs[0].documentId == 6
+    assert response.retrievalTrace is not None
+    assert response.retrievalTrace.route == "coupon"
+    assert response.retrievalTrace.sourceType == "knowledge"
+    assert response.retrievalTrace.retriever == "lightrag"
+    assert response.retrievalTrace.requestedTopK == 20
+    assert response.retrievalTrace.returnedChunkCount == 2
+    assert response.retrievalTrace.selectedChunkCount == 1
+    assert response.retrievalTrace.attributionStatus == "chunk_level"
+    assert response.retrievalTrace.selectedCategories == ["coupon"]
+    assert response.retrievalTrace.selectedSourceIds == ["kb:6:3:12"]
+    assert response.retrievalTrace.hitLogCount == 1
+    assert response.retrievalTrace.citationCount == 1
+    assert response.retrievalTrace.fallbackReason is None
 
 
 def test_handle_chat_returns_friendly_message_when_knowledge_retrieval_is_unavailable(monkeypatch):

@@ -5,13 +5,14 @@ import { useRoute, useRouter } from 'vue-router'
 import UiButton from '../components/ui/UiButton.vue'
 import UiInput from '../components/ui/UiInput.vue'
 import UiPageHeader from '../components/ui/UiPageHeader.vue'
+import { api } from '../lib/api'
 
 type Mode = 'phone' | 'email'
 
 const router = useRouter()
 const route = useRoute()
 
-const mode = ref<Mode>('phone')
+const mode = ref<Mode>('email')
 const phone = ref('')
 const email = ref('')
 const code = ref('')
@@ -39,11 +40,12 @@ const confirmOk = computed(() => confirmPassword.value.length > 0 && confirmPass
 const canSendCode = computed(() => {
   if (!accountOk.value) return false
   if (codeState.value.sending || codeState.value.secondsLeft > 0) return false
-  return true
+  return mode.value === 'email'
 })
 
 const canSubmit = computed(() => {
   if (submitState.value === 'submitting') return false
+  if (mode.value !== 'email') return false
   return accountOk.value && codeOk.value && passwordOk.value && confirmOk.value
 })
 
@@ -63,12 +65,26 @@ const tick = () => {
 }
 
 const sendCode = async () => {
+  if (mode.value !== 'email') {
+    errorText.value = '暂未接入短信验证码，请使用邮箱找回密码'
+    return
+  }
   if (!canSendCode.value) return
   errorText.value = null
   codeState.value = { sending: true, secondsLeft: 0 }
-  await new Promise((r) => window.setTimeout(r, 450))
-  codeState.value = { sending: false, secondsLeft: 60 }
-  window.setTimeout(tick, 1000)
+  try {
+    const res = await api.post('/v1/auth/password-reset-code', { email: email.value.trim() })
+    const cooldown = Number(res.data?.data?.cooldownSeconds ?? 60)
+    codeState.value = { sending: false, secondsLeft: Number.isFinite(cooldown) ? cooldown : 60 }
+    window.setTimeout(tick, 1000)
+  } catch (e) {
+    const msg =
+      (e as any)?.response?.data?.error?.message ||
+      (e as any)?.message ||
+      '验证码发送失败，请稍后重试'
+    errorText.value = msg
+    codeState.value = { sending: false, secondsLeft: 0 }
+  }
 }
 
 const submit = async () => {
@@ -77,14 +93,21 @@ const submit = async () => {
   submitState.value = 'submitting'
 
   try {
-    await new Promise((r) => window.setTimeout(r, 550))
-
     if (!confirmOk.value) throw new Error('两次输入的密码不一致')
+
+    await api.post('/v1/auth/reset-password', {
+      account: email.value.trim(),
+      password: password.value,
+      emailCode: code.value.trim(),
+    })
 
     window.alert('密码已重置，请使用新密码登录')
     await router.replace({ name: 'login', query: { redirect: redirectTo.value } })
   } catch (e) {
-    errorText.value = e instanceof Error ? e.message : '重置失败，请重试'
+    errorText.value =
+      (e as any)?.response?.data?.error?.message ||
+      (e as any)?.message ||
+      '重置失败，请重试'
   } finally {
     submitState.value = 'idle'
   }
@@ -135,6 +158,7 @@ const submit = async () => {
               autocomplete="tel"
               placeholder="请输入手机号"
             />
+            <div class="hint">短信验证码暂未接入，请切换到邮箱找回。</div>
           </div>
           <div v-else class="field">
             <label class="label" for="email">邮箱</label>
@@ -273,6 +297,12 @@ const submit = async () => {
 .label {
   font-size: var(--font-sm);
   color: var(--text);
+}
+
+.hint {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .row {

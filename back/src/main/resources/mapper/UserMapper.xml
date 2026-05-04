@@ -16,4 +16,10 @@
         VALUES (#{account}, #{password}, #{nickname}, NOW(), NOW())
     </insert>
 
+    <update id="updatePassword">
+        UPDATE users
+        SET password = #{password}, update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
 </mapper>

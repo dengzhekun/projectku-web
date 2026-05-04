@@ -51,9 +51,16 @@ const autoPay = computed(() => {
 const polling = ref(false)
 const loading = ref(false)
 const lastTradeId = ref<string>('')
+const externalPayStarted = ref(false)
 let timer: number | null = null
 
 const canShow = computed(() => Boolean(orderId.value))
+const mockPaymentAutocompleteEnabled = computed(() => {
+  const raw = import.meta.env.VITE_ENABLE_MOCK_PAYMENT_AUTOCOMPLETE
+  if (raw === 'true') return true
+  if (raw === 'false') return false
+  return import.meta.env.DEV
+})
 
 const stop = () => {
   polling.value = false
@@ -113,8 +120,9 @@ const refreshPaymentStatus = async () => {
     }
     orderDraft.setProcessing()
   } catch (e) {
-    const code = (e as any)?.response?.data?.code
-    if (code === 404) {
+    const status = (e as any)?.response?.status
+    const code = (e as any)?.response?.data?.error?.code
+    if (status === 404 || code === 'PAYMENT_NOT_FOUND') {
       orderDraft.setInit()
       stop()
       return
@@ -165,12 +173,25 @@ const startPayment = async () => {
       return
     }
     startPolling()
-    if (tradeId) {
+    if (channel.value === 'alipay' && String(data.mode ?? '') === 'sdk' && typeof data.payForm === 'string' && data.payForm) {
+      externalPayStarted.value = true
+      openAlipayForm(data.payForm)
+      return
+    }
+    if (tradeId && mockPaymentAutocompleteEnabled.value && String(data.mode ?? '') === 'mock') {
       await new Promise((r) => window.setTimeout(r, 800))
       await api.post('/v1/payments/webhook', { tradeId, status: 'SUCCESS' })
+      return
+    }
+    if (String(data.mode ?? '') === 'mock' && !mockPaymentAutocompleteEnabled.value) {
+      toast.push({ type: 'info', message: '当前支付通道为模拟模式，请配置真实支付后再完成付款' })
     }
   } catch (e) {
-    const msg = (e as any)?.response?.data?.message || (e as any)?.message || '发起支付失败'
+    const msg =
+      (e as any)?.response?.data?.error?.message ||
+      (e as any)?.response?.data?.message ||
+      (e as any)?.message ||
+      '发起支付失败'
     orderDraft.markFailed(msg)
     toast.push({ type: 'error', message: msg })
     tracker.track('payment_failed', { orderId: orderId.value, reason: 'initiate_failed' })
@@ -178,6 +199,23 @@ const startPayment = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const openAlipayForm = (payForm: string) => {
+  const win = window.open('', '_blank')
+  if (!win) {
+    const wrapper = document.createElement('div')
+    wrapper.style.display = 'none'
+    wrapper.innerHTML = payForm
+    document.body.appendChild(wrapper)
+    const form = wrapper.querySelector('form') as HTMLFormElement | null
+    form?.submit()
+    window.setTimeout(() => wrapper.remove(), 1000)
+    return
+  }
+  win.document.open()
+  win.document.write(payForm)
+  win.document.close()
 }
 
 const retry = () => {
@@ -239,6 +277,7 @@ onBeforeUnmount(() => {
         <div v-if="status === 'PROCESSING'" class="status">
           <div class="badge info">处理中</div>
           <div class="desc">正在同步支付状态，请稍候</div>
+          <div v-if="externalPayStarted" class="desc">支付宝窗口已打开，请完成支付后返回当前页面</div>
           <div class="actions">
             <UiButton size="sm" type="button" :disabled="polling" @click="startPolling">刷新状态</UiButton>
             <UiButton size="sm" type="button" @click="router.push({ name: 'cart' })">返回购物车</UiButton>

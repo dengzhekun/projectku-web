@@ -10,4 +10,6 @@ public interface UserMapper {
     User getByAccount(String account);
     
     int insert(User user);
+
+    int updatePassword(User user);
 }

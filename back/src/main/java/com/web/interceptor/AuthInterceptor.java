@@ -24,8 +24,8 @@ public class AuthInterceptor implements HandlerInterceptor {
         String token = request.getHeader("Authorization");
 
         AuthTokenService.VerifiedToken verifiedToken = authTokenService.verifyRequired(token);
-        if (isKnowledgeBaseAdminRequest(request) && !"admin".equals(verifiedToken.account())) {
-            throw new BusinessException("FORBIDDEN", "Only administrators can access knowledge base admin APIs");
+        if (isAdminRequest(request) && !"admin".equals(verifiedToken.account())) {
+            throw new BusinessException("FORBIDDEN", "Only administrators can access admin APIs");
         }
 
         CURRENT_USER.set(verifiedToken.userId());
@@ -55,13 +55,16 @@ public class AuthInterceptor implements HandlerInterceptor {
         return account;
     }
 
-    private boolean isKnowledgeBaseAdminRequest(HttpServletRequest request) {
+    private boolean isAdminRequest(HttpServletRequest request) {
         String servletPath = request.getServletPath();
         String requestUri = request.getRequestURI();
-        return startsWithKbPath(servletPath) || startsWithKbPath(requestUri);
+        return startsWithAdminPath(servletPath) || startsWithAdminPath(requestUri);
     }
 
-    private boolean startsWithKbPath(String path) {
-        return path != null && (path.startsWith("/v1/kb/") || path.startsWith("/api/v1/kb/"));
+    private boolean startsWithAdminPath(String path) {
+        return path != null && (path.startsWith("/v1/kb/")
+                || path.startsWith("/api/v1/kb/")
+                || path.startsWith("/v1/admin/")
+                || path.startsWith("/api/v1/admin/"));
     }
 }

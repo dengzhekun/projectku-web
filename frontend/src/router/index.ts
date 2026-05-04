@@ -72,6 +72,12 @@ export const router = createRouter({
       meta: { title: '帮助中心', hideNav: true, description: '帮助中心：常见问题、购物指南与客服联系方式。' },
     },
     {
+      path: '/admin',
+      name: 'adminHome',
+      component: () => import('../views/AdminHomeView.vue'),
+      meta: { title: '后台首页', hideNav: true, hideChat: true, requiresAdmin: true, description: '后台首页：统一入口与状态总览。' },
+    },
+    {
       path: '/admin/login',
       name: 'adminLogin',
       component: () => import('../views/AdminLoginView.vue'),
@@ -82,6 +88,12 @@ export const router = createRouter({
       name: 'knowledgeBaseAdmin',
       component: () => import('../views/KnowledgeBaseAdminView.vue'),
       meta: { title: '知识库管理', hideNav: true, hideChat: true, requiresAdmin: true, description: '知识库后台：文档上传、切分预览、索引记录与命中日志。' },
+    },
+    {
+      path: '/admin/payments',
+      name: 'adminPayments',
+      component: () => import('../views/AdminPaymentsView.vue'),
+      meta: { title: '支付订单看板', hideNav: true, hideChat: true, requiresAdmin: true, description: '支付订单后台：查看订单、支付流水和余额流水。' },
     },
     {
       path: '/faq',

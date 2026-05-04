@@ -43,4 +43,30 @@
         LIMIT #{limit}
     </select>
 
+    <select id="adminOrderStats" resultType="map">
+        SELECT
+            COUNT(*) AS totalOrders,
+            COALESCE(SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END), 0) AS pendingOrders,
+            COALESCE(SUM(CASE WHEN status IN (1, 2, 3) THEN 1 ELSE 0 END), 0) AS paidOrders,
+            COALESCE(SUM(CASE WHEN status = 4 THEN 1 ELSE 0 END), 0) AS canceledOrders,
+            COALESCE(SUM(pay_amount), 0) AS totalOrderAmount,
+            COALESCE(SUM(CASE WHEN status IN (1, 2, 3) THEN pay_amount ELSE 0 END), 0) AS paidOrderAmount
+        FROM orders
+    </select>
+
+    <select id="adminRecentOrders" resultType="map">
+        SELECT
+            id,
+            user_id AS userId,
+            order_no AS orderNo,
+            total_amount AS totalAmount,
+            pay_amount AS payAmount,
+            status,
+            create_time AS createTime,
+            update_time AS updateTime
+        FROM orders
+        ORDER BY create_time DESC
+        LIMIT #{limit}
+    </select>
+
 </mapper>

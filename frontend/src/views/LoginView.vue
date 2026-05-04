@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import UiButton from '../components/ui/UiButton.vue'
 import UiInput from '../components/ui/UiInput.vue'
 import UiPageHeader from '../components/ui/UiPageHeader.vue'
+import { api } from '../lib/api'
 import { useAuthStore } from '../stores/auth'
 
 type Mode = 'code' | 'password'
@@ -30,6 +31,7 @@ const redirectTo = computed(() => {
 })
 
 const activeAccount = computed(() => account.value.trim())
+const accountIsEmail = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(activeAccount.value))
 
 const accountOk = computed(() => {
   const v = account.value.trim()
@@ -56,7 +58,7 @@ const canSubmit = computed(() => {
   if (submitState.value === 'submitting') return false
   if (!agree.value) return false
   if (!accountOk.value) return false
-  if (mode.value === 'code') return /^\d{4,8}$/.test(code.value.trim())
+  if (mode.value === 'code') return accountIsEmail.value && /^\d{4,8}$/.test(code.value.trim())
   return password.value.length >= 6
 })
 
@@ -77,12 +79,26 @@ const tick = () => {
 }
 
 const sendCode = async () => {
+  if (mode.value === 'code' && !accountIsEmail.value) {
+    errorText.value = '暂未接入短信验证码，请使用邮箱验证码登录'
+    return
+  }
   if (!canSendCode.value) return
   errorText.value = null
   codeState.value = { sending: true, secondsLeft: 0 }
-  await new Promise((r) => window.setTimeout(r, 450))
-  codeState.value = { sending: false, secondsLeft: 60 }
-  window.setTimeout(tick, 1000)
+  try {
+    const res = await api.post('/v1/auth/login-code', { email: activeAccount.value })
+    const cooldown = Number(res.data?.data?.cooldownSeconds ?? 60)
+    codeState.value = { sending: false, secondsLeft: Number.isFinite(cooldown) ? cooldown : 60 }
+    window.setTimeout(tick, 1000)
+  } catch (e) {
+    const msg =
+      (e as any)?.response?.data?.error?.message ||
+      (e as any)?.message ||
+      '验证码发送失败，请稍后重试'
+    errorText.value = msg
+    codeState.value = { sending: false, secondsLeft: 0 }
+  }
 }
 
 const submit = async () => {
@@ -108,7 +124,7 @@ const submit = async () => {
     if (mode.value === 'password') {
       await auth.loginWithAccount(activeAccount.value || 'user@example.com', password.value)
     } else {
-      await auth.loginWithAccount(activeAccount.value || 'user@example.com')
+      await auth.loginWithEmailCode(activeAccount.value, code.value.trim())
     }
     await router.replace(redirectTo.value)
   } catch (e) {
@@ -211,6 +227,9 @@ const goPrivacy = () => {
                 <span v-else-if="codeState.secondsLeft > 0">{{ codeState.secondsLeft }}s</span>
                 <span v-else>获取验证码</span>
               </UiButton>
+            </div>
+            <div v-if="activeAccount && !accountIsEmail" class="fieldError" role="alert">
+              短信验证码暂未接入，请使用邮箱验证码登录。
             </div>
           </div>
 

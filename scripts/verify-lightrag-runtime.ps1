@@ -13,7 +13,7 @@ param(
     [switch]$RunSmoke,
     [ValidateSet("AiService", "Backend")]
     [string]$SmokeTarget = "AiService",
-    [string]$SmokeMessage = "售后质量问题退回运费谁承担？",
+    [string]$SmokeMessage = "$([char]0x552e)$([char]0x540e)$([char]0x8d28)$([char]0x91cf)$([char]0x95ee)$([char]0x9898)$([char]0x9000)$([char]0x56de)$([char]0x8fd0)$([char]0x8d39)$([char]0x8c01)$([char]0x627f)$([char]0x62c5)$([char]0xff1f)",
     [string]$SmokeConversationId = "runtime-smoke"
 )
 

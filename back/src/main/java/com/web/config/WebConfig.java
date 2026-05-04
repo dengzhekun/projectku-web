@@ -34,6 +34,7 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns("/v1/auth/**")
                 .excludePathPatterns("/v1/products/**")
                 .excludePathPatterns("/v1/customer-service/**")
-                .excludePathPatterns("/v1/payments/webhook"); // 支付回调不需要用户Token
+                .excludePathPatterns("/v1/payments/webhook")
+                .excludePathPatterns("/v1/payments/alipay/notify"); // 支付回调不需要用户Token
     }
 }

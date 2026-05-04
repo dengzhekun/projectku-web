@@ -8,4 +8,8 @@ public interface UserService {
     User register(String account, String password, String nickname);
     
     User getUserById(Long id);
+
+    User getUserByAccount(String account);
+
+    void resetPassword(String account, String newPassword);
 }
