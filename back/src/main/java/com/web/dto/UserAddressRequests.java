@@ -16,6 +16,15 @@ public class UserAddressRequests {
         @Schema(example = "上海市 浦东新区")
         private String region;
 
+        @Schema(example = "上海市", description = "兼容前端按省市区拆分提交；region 为空时自动拼接")
+        private String province;
+
+        @Schema(example = "上海市", description = "兼容前端按省市区拆分提交；region 为空时自动拼接")
+        private String city;
+
+        @Schema(example = "浦东新区", description = "兼容前端按省市区拆分提交；region 为空时自动拼接")
+        private String district;
+
         @Schema(example = "世纪大道100号 1号楼 1001室")
         private String detail;
 
@@ -34,6 +43,15 @@ public class UserAddressRequests {
 
         @Schema(example = "上海市 浦东新区")
         private String region;
+
+        @Schema(example = "上海市", description = "兼容前端按省市区拆分提交；region 为空时自动拼接")
+        private String province;
+
+        @Schema(example = "上海市", description = "兼容前端按省市区拆分提交；region 为空时自动拼接")
+        private String city;
+
+        @Schema(example = "浦东新区", description = "兼容前端按省市区拆分提交；region 为空时自动拼接")
+        private String district;
 
         @Schema(example = "世纪大道100号 1号楼 1001室")
         private String detail;
