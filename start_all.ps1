@@ -25,7 +25,7 @@ New-Item -ItemType Directory -Force -Path $LogsDir, $PidsDir | Out-Null
 
 function Import-EnvFile([string]$Path) {
   if (-not (Test-Path $Path)) { return }
-  Get-Content -LiteralPath $Path | ForEach-Object {
+  Get-Content -LiteralPath $Path -Encoding UTF8 | ForEach-Object {
     $line = $_.Trim()
     if (-not $line -or $line.StartsWith("#")) { return }
     $idx = $line.IndexOf("=")
