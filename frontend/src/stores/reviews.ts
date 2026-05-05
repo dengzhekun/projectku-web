@@ -20,7 +20,7 @@ export const useReviewsStore = defineStore('reviews', () => {
   const items = computed(() => itemsRef.value.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)))
 
   const fetch = async (productId?: string, orderId?: string) => {
-    const res = await api.get('/v1/reviews', { params: { productId, orderId } })
+    const res = await api.get('/v1/reviews', { params: { productId, orderId }, silentUnauthorized: true } as any)
     const list = Array.isArray(res.data?.data) ? res.data.data : []
     itemsRef.value = list.map((x: any) => ({
       id: String(x.id),

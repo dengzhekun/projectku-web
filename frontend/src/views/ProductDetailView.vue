@@ -9,6 +9,7 @@ import { useFavoritesStore } from '../stores/favorites'
 import { useReviewsStore, type Review } from '../stores/reviews'
 import { api } from '../lib/api'
 import { resolveProductMedia } from '../lib/productMedia'
+import ProductCardImage from '../components/ProductCardImage.vue'
 
 import backIconUrl from '../assets/figma/product-detail/back.svg'
 import cartIconUrl from '../assets/figma/product-detail/cart.svg'
@@ -163,7 +164,11 @@ const fetchReviews = async (productId: string) => {
   try {
     await reviewsStore.fetch(productId)
     reviewsState.value = 'ready'
-  } catch {
+  } catch (error: any) {
+    if (error?.response?.status === 401 || error?.response?.data?.error?.code === 'UNAUTHORIZED') {
+      reviewsState.value = 'ready'
+      return
+    }
     reviewsState.value = 'error'
   }
 }
@@ -424,7 +429,7 @@ onMounted(() => {
           <div class="cols">
             <div class="left">
               <div class="hero" aria-label="商品图片">
-                <img class="heroImg" :src="product.media[currentMediaIndex]" :alt="product.title" />
+                <ProductCardImage :src="product.media[currentMediaIndex]" :alt="product.title" variant="detail" />
               </div>
 
               <div class="thumbs" aria-label="图片选择">
@@ -437,7 +442,7 @@ onMounted(() => {
                   :aria-label="`图片 ${i + 1}`"
                   @click="currentMediaIndex = i"
                 >
-                  <img class="thumbImg" :src="m" :alt="product.title" />
+                  <ProductCardImage :src="m" :alt="product.title" variant="thumb" />
                 </button>
               </div>
             </div>
@@ -791,16 +796,7 @@ onMounted(() => {
 }
 
 .hero {
-  background: var(--code-bg);
-  border-radius: 10px;
   overflow: hidden;
-}
-
-.heroImg {
-  width: 100%;
-  height: 463px;
-  object-fit: cover;
-  display: block;
 }
 
 .thumbs {
@@ -825,14 +821,6 @@ onMounted(() => {
 
 .thumbBtn:disabled {
   opacity: 0.6;
-}
-
-.thumbImg {
-  width: 100%;
-  height: 76px;
-  object-fit: cover;
-  border-radius: 8px;
-  display: block;
 }
 
 .right {
@@ -1454,10 +1442,5 @@ onMounted(() => {
   }
 }
 
-@media (max-width: 540px) {
-  .heroImg {
-    height: 320px;
-  }
-}
 </style>
 

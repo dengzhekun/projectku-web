@@ -31,8 +31,9 @@ export const withIdempotency = () => {
 api.interceptors.response.use(
   (resp) => {
     const code = resp?.data?.code
+    const silentUnauthorized = Boolean((resp.config as any)?.silentUnauthorized)
     if (typeof code === 'number' && code !== 200) {
-      if (code === 401) {
+      if (code === 401 && !silentUnauthorized) {
         window.dispatchEvent(new CustomEvent('app:unauthorized'))
       }
       const msg = resp?.data?.message || resp?.data?.error?.message || '请求失败'
@@ -46,7 +47,8 @@ api.interceptors.response.use(
   (err) => {
     const status = err?.response?.status
     const ecode = err?.response?.data?.error?.code
-    if (status === 401 || ecode === 'UNAUTHORIZED') {
+    const silentUnauthorized = Boolean((err?.config as any)?.silentUnauthorized)
+    if ((status === 401 || ecode === 'UNAUTHORIZED') && !silentUnauthorized) {
       window.dispatchEvent(new CustomEvent('app:unauthorized'))
     }
     return Promise.reject(err)

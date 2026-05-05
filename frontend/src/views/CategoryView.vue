@@ -8,6 +8,7 @@ import { useCartStore } from '../stores/cart'
 import { useToastStore } from '../stores/toast'
 import { api } from '../lib/api'
 import { mapBackendProduct } from '../lib/productMapper'
+import ProductCardImage from '../components/ProductCardImage.vue'
 
 type LoadState = 'loading' | 'ready' | 'error'
 
@@ -246,7 +247,7 @@ watch(active, () => {
       <div v-else class="grid" aria-label="商品列表">
         <article v-for="p in filtered" :key="p.id" class="card">
           <button class="cardBtn" type="button" @click="goProduct(p)">
-            <img class="cover" :src="p.cover" :alt="p.title" loading="lazy" decoding="async" />
+            <ProductCardImage :src="p.cover" :alt="p.title" />
             <div class="meta">
               <div class="name">{{ p.title }}</div>
               <div class="row">
@@ -383,14 +384,6 @@ watch(active, () => {
   width: 100%;
 }
 
-.cover {
-  width: 100%;
-  height: 140px;
-  object-fit: cover;
-  display: block;
-  background: var(--code-bg);
-}
-
 .meta {
   padding: 12px;
   display: grid;
@@ -462,8 +455,5 @@ watch(active, () => {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .cover {
-    height: 170px;
-  }
 }
 </style>

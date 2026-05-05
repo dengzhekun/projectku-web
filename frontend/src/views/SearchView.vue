@@ -9,6 +9,7 @@ import { useCartStore } from '../stores/cart'
 import { api } from '../lib/api'
 import { mapBackendProduct } from '../lib/productMapper'
 import { useToastStore } from '../stores/toast'
+import ProductCardImage from '../components/ProductCardImage.vue'
 
 type LoadState = 'loading' | 'ready' | 'error'
 type SortKey = 'default' | 'sales' | 'price_asc' | 'price_desc'
@@ -140,7 +141,7 @@ onMounted(() => {
       <div v-else class="grid" aria-label="搜索结果">
         <article v-for="p in filtered" :key="p.id" class="card">
           <button class="cardBtn" type="button" @click="goProduct(p)">
-            <img class="cover" :src="p.cover" :alt="p.title" loading="lazy" decoding="async" />
+            <ProductCardImage :src="p.cover" :alt="p.title" />
             <div class="meta">
               <div class="titleText">{{ p.title }}</div>
               <div class="row">
@@ -216,14 +217,6 @@ onMounted(() => {
   width: 100%;
 }
 
-.cover {
-  width: 100%;
-  height: 140px;
-  object-fit: cover;
-  display: block;
-  background: var(--code-bg);
-}
-
 .meta {
   padding: 12px;
   display: grid;
@@ -295,8 +288,5 @@ onMounted(() => {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .cover {
-    height: 170px;
-  }
 }
 </style>
