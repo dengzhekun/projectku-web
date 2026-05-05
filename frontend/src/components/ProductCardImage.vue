@@ -15,7 +15,7 @@ type Crop = {
 }
 
 const imageEl = ref<HTMLImageElement | null>(null)
-const bgColor = ref('#f8f8f6')
+const bgColor = ref('#f7f7f5')
 const crop = ref<Crop | null>(null)
 
 const imageStyle = computed(() => {
@@ -50,7 +50,16 @@ const colorDistance = (a: number[], b: number[]) => {
   return Math.sqrt(dr * dr + dg * dg + db * db)
 }
 
-const toCssRgb = (rgb: number[]) => `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`
+const displaySurfaceColor = (rgb: number[]) => {
+  const [r, g, b] = rgb
+  const avg = (r + g + b) / 3
+  const chroma = Math.max(r, g, b) - Math.min(r, g, b)
+
+  if (avg >= 236 && chroma <= 26) return '#ffffff'
+  if (avg <= 32 && chroma <= 26) return '#080808'
+
+  return '#f7f7f5'
+}
 
 const averageColor = (samples: number[][]) => {
   const total = samples.reduce(
@@ -94,7 +103,7 @@ const analyzeImage = () => {
       return [px[0], px[1], px[2]]
     })
     const background = averageColor(points)
-    bgColor.value = toCssRgb(background)
+    bgColor.value = displaySurfaceColor(background)
 
     const data = ctx.getImageData(0, 0, width, height).data
     let minX = width
@@ -153,7 +162,7 @@ const analyzeImage = () => {
 watch(
   () => props.src,
   () => {
-    bgColor.value = '#f8f8f6'
+    bgColor.value = '#f7f7f5'
     crop.value = null
   },
 )
