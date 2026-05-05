@@ -26,8 +26,9 @@ class Settings(BaseSettings):
     ai_llm_strip_think: bool = True
     ai_llm_timeout_seconds: int = 120
 
-    ai_embedding_provider: str = "local_bge_m3"
-    ai_embedding_model: str = "BAAI/bge-m3"
+    ai_embedding_provider: str = "local_bge"
+    ai_embedding_model: str = "BAAI/bge-small-zh-v1.5"
+    ai_embedding_dimensions: int = 512
     ai_embedding_device: str = "cpu"
     ai_embedding_hf_endpoint: str = "https://hf-mirror.com"
     ai_embedding_cache_dir: str = "./data/huggingface"

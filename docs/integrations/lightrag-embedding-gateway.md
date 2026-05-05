@@ -20,8 +20,8 @@ Set in `deploy/lightrag.env` (from `.template` or `.example`):
 EMBEDDING_BINDING=openai
 EMBEDDING_BINDING_HOST=http://ai-service:9000/v1
 EMBEDDING_BINDING_API_KEY=<same value as AI_EMBEDDING_GATEWAY_API_KEY>
-EMBEDDING_MODEL=BAAI/bge-m3
-EMBEDDING_DIM=1024
+EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+EMBEDDING_DIM=512
 EMBEDDING_TOKEN_LIMIT=8192
 EMBEDDING_SEND_DIM=false
 EMBEDDING_USE_BASE64=false
@@ -52,7 +52,7 @@ Optional parameters:
 scripts/check_embedding_gateway.ps1 `
   -BaseUrl http://127.0.0.1:9000/v1 `
   -ApiKey $env:AI_EMBEDDING_GATEWAY_API_KEY `
-  -Model BAAI/bge-m3 `
+  -Model BAAI/bge-small-zh-v1.5 `
   -TimeoutSeconds 30
 ```
 

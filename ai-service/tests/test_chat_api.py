@@ -11,6 +11,7 @@ client = TestClient(app)
 
 def test_classify_customer_service_route_separates_product_and_policy_questions():
     assert chat_api.classify_customer_service_route("苹果15多少钱？") == "product"
+    assert chat_api.classify_customer_service_route("iphone15多少钱？") == "product"
     assert chat_api.classify_customer_service_route("注册送多少钱余额？余额不足怎么办？") == "payment_refund"
     assert chat_api.classify_customer_service_route("我的余额是多少？") == "wallet"
     assert chat_api.classify_customer_service_route("我的订单到哪了？") == "order"
@@ -793,10 +794,37 @@ def test_handle_chat_returns_deterministic_no_match_for_plain_apple_price_query(
     assert "品牌" not in response.answer
     assert "Apple" not in response.answer
     assert "水果苹果" in response.answer
-    assert response.route == "product"
-    assert response.sourceType == "product"
+    assert response.route == "clarification"
+    assert response.sourceType == "clarification"
     assert response.confidence == 0.62
     assert response.citations == []
+
+
+def test_handle_chat_stream_returns_clarification_for_plain_apple_price_query(monkeypatch):
+    class FailingProductTool:
+        def search(self, message: str):
+            raise AssertionError("Plain apple stream queries should ask for clarification before product search")
+
+    class FailingRetriever:
+        def query(self, text: str, top_k: int = 6):
+            raise AssertionError("Plain apple stream queries should not fall back to knowledge retrieval")
+
+    monkeypatch.setattr(
+        chat_api,
+        "get_settings",
+        lambda: SimpleNamespace(ai_cs_max_message_length=800, ai_llm_api_key="test-key"),
+    )
+    monkeypatch.setattr(chat_api, "get_product_tool_client", lambda: FailingProductTool())
+    monkeypatch.setattr(chat_api, "get_knowledge_retriever", lambda: FailingRetriever())
+
+    events = list(chat_api.handle_chat_stream(ChatRequest(message="苹果多少钱？")))
+    final_event = next(event for event in events if event["type"] == "final")
+    reply = final_event["reply"]
+
+    assert "「苹果」这个词太宽" in reply["answer"]
+    assert reply["route"] == "clarification"
+    assert reply["sourceType"] == "clarification"
+    assert reply["citations"] == []
 
 
 def test_handle_chat_uses_product_tool_for_apple_15_price_query(monkeypatch):
@@ -836,6 +864,49 @@ def test_handle_chat_uses_product_tool_for_apple_15_price_query(monkeypatch):
     response = chat_api.handle_chat(ChatRequest(message="苹果15多少钱？"))
 
     assert captured["product_query"] == "苹果15多少钱？"
+    assert "iPhone 15 128G" in captured["prompt"]
+    assert response.route == "product"
+    assert response.sourceType == "product"
+    assert response.citations[0].sourceId == "15"
+
+
+def test_handle_chat_uses_product_tool_for_iphone_15_price_query(monkeypatch):
+    captured = {}
+
+    class DummyProductTool:
+        def search(self, message: str):
+            captured["product_query"] = message
+            return [
+                {
+                    "id": 15,
+                    "name": "iPhone 15 128G",
+                    "price": 5199,
+                    "stock": 11,
+                }
+            ]
+
+    class DummyLlmClient:
+        def chat(self, prompt: str):
+            captured["prompt"] = prompt
+            return "iPhone 15 128G 当前售价 5199 元，库存 11 件。"
+
+    class FailingRetriever:
+        def query(self, text: str, top_k: int = 6):
+            raise AssertionError("iPhone 15 realtime product hits should not query knowledge retriever")
+
+    monkeypatch.setattr(
+        chat_api,
+        "get_settings",
+        lambda: SimpleNamespace(ai_cs_max_message_length=800, ai_llm_api_key="test-key"),
+    )
+    monkeypatch.setattr(chat_api, "get_product_tool_client", lambda: DummyProductTool())
+    monkeypatch.setattr(chat_api, "get_llm_client", lambda: DummyLlmClient())
+    monkeypatch.setattr(chat_api, "get_knowledge_retriever", lambda: FailingRetriever())
+    monkeypatch.setattr(chat_api, "strip_think_tags", lambda text: text)
+
+    response = chat_api.handle_chat(ChatRequest(message="iphone15多少钱？"))
+
+    assert captured["product_query"] == "iphone15多少钱？"
     assert "iPhone 15 128G" in captured["prompt"]
     assert response.route == "product"
     assert response.sourceType == "product"

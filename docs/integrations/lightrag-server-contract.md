@@ -135,7 +135,7 @@ LightRAG Server runtime should provide/configure at least:
 - `EMBEDDING_BINDING=openai`
 - `EMBEDDING_BINDING_HOST=http://ai-service:9000/v1` (compose internal network)
 - `EMBEDDING_BINDING_API_KEY` (same value as `AI_EMBEDDING_GATEWAY_API_KEY` in `deploy/ai-service.env`)
-- `EMBEDDING_MODEL=BAAI/bge-m3`, `EMBEDDING_DIM=1024`
+- Current production embedding baseline: `EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5`, `EMBEDDING_DIM=512`
 - `EMBEDDING_TOKEN_LIMIT`, `EMBEDDING_SEND_DIM=false`, `EMBEDDING_USE_BASE64=false`
 - `LIGHTRAG_KV_STORAGE`, `LIGHTRAG_VECTOR_STORAGE`, `LIGHTRAG_GRAPH_STORAGE`, `LIGHTRAG_DOC_STATUS_STORAGE`
 - Neo4j options when used: `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE`

@@ -113,7 +113,7 @@ To make AI chat actually answer through your remote LLM, copy `deploy/ai-service
 - `AI_LLM_API_KEY`
 - `AI_LLM_BASE_URL` / `AI_LLM_MODEL` if you are not using the default provider
 
-By default the AI service uses local `BAAI/bge-m3` embeddings, so the first startup may download model files. If you already have a remote embedding service, set `AI_EMBEDDING_PROVIDER=remote_http` and fill the remote embedding variables instead.
+By default the AI service uses local `BAAI/bge-small-zh-v1.5` embeddings (`512` dimensions), so the first startup may download model files. If you already have a remote embedding service, set `AI_EMBEDDING_PROVIDER=remote_http` and fill the remote embedding variables instead. If you change the embedding model or dimension, rebuild the LightRAG index before serving knowledge-base queries.
 
 Default local URLs after startup:
 

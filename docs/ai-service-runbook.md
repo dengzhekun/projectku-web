@@ -53,17 +53,20 @@ After the first run, omit `-InstallAiDeps` unless dependencies changed and omit 
 
 ## Embedding Download
 
-The default embedding model is `BAAI/bge-m3`. The config sets `HF_ENDPOINT=https://hf-mirror.com` and caches model files under `ai-service/data/huggingface` for better mainland China download reliability.
+The current default embedding model is `BAAI/bge-small-zh-v1.5` with `512` dimensions. The config sets `HF_ENDPOINT=https://hf-mirror.com` and caches model files under `ai-service/data/huggingface` for better mainland China download reliability.
 
 If the automatic download is still slow, pre-download the model manually and point the service to the local folder:
 
 ```powershell
 set HF_ENDPOINT=https://hf-mirror.com
-huggingface-cli download BAAI/bge-m3 --local-dir data/models/bge-m3
-set AI_EMBEDDING_MODEL=./data/models/bge-m3
+huggingface-cli download BAAI/bge-small-zh-v1.5 --local-dir data/models/bge-small-zh-v1.5
+set AI_EMBEDDING_MODEL=./data/models/bge-small-zh-v1.5
+set AI_EMBEDDING_DIMENSIONS=512
 ```
 
-`BGE-M3` does not need a separate daemon. It is loaded inside the FastAPI process when the first embedding request arrives. After that, its memory stays resident until the `ai-service` process restarts.
+The local BGE model does not need a separate daemon in simple local development. It is loaded inside the FastAPI process when the first embedding request arrives. After that, its memory stays resident until the `ai-service` process restarts. Production currently runs the same small model through a separate local embedding service to keep LightRAG indexing and customer-service queries more predictable.
+
+For production embedding deployment tradeoffs, including the preserved BGE-M3 path, the small Aliyun model path, and cloud embedding migration, see `docs/integrations/lightrag-embedding-deployment-options.md`.
 
 ## Production
 
@@ -73,7 +76,7 @@ Production compose reads `deploy/ai-service.env` directly. The `ai-service-data`
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Minimum memory is about 8 GB for a small single-server deployment without local LLM inference. Recommended memory is 12-16 GB because BGE-M3 CPU embedding and Neo4j can spike during warm-up and indexing.
+Minimum memory is about 4 GB for the current small-model single-server deployment without local LLM inference. Recommended memory is 8 GB or more because LightRAG indexing, Neo4j, MySQL, Java, and frontend builds can still spike during maintenance work. If you switch back to BGE-M3, use 8 GB minimum and preferably 12-16 GB.
 
 For LightRAG embedding gateway mode, set:
 
@@ -86,7 +89,7 @@ Set these variables in `deploy/ai-service.env` (or start from `deploy/ai-service
 
 ```bash
 KNOWLEDGE_RETRIEVER=lightrag
-LIGHTRAG_BASE_URL=http://127.0.0.1:9621
+LIGHTRAG_BASE_URL=http://127.0.0.1:19621
 LIGHTRAG_API_KEY=
 LIGHTRAG_TIMEOUT_SECONDS=60
 LIGHTRAG_QUERY_MODE=hybrid
@@ -95,6 +98,7 @@ LIGHTRAG_QUERY_MODE=hybrid
 `LIGHTRAG_BASE_URL` values:
 
 - Local process on the same host: `http://127.0.0.1:9621`
+- Current standalone Docker host mapping: `http://127.0.0.1:19621`
 - Docker Compose internal network: `http://lightrag:9621`
 
 LightRAG runtime env file:

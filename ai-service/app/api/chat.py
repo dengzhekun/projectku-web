@@ -410,8 +410,8 @@ def plain_apple_no_match_response(message: str) -> ChatResponse:
             "如果你问的是水果苹果，请补充具体商品名或规格；如果你想问手机，请输入具体型号，比如 苹果15 / iPhone 15。"
         ),
         confidence=0.62,
-        route="product",
-        sourceType="product",
+        route="clarification",
+        sourceType="clarification",
         citations=[],
         actions=[],
         hitLogs=[],

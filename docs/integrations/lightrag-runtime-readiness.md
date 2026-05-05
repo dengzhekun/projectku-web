@@ -19,8 +19,8 @@ LightRAG runtime must have these groups set:
    - `EMBEDDING_BINDING=openai`
    - `EMBEDDING_BINDING_HOST=http://ai-service:9000/v1`
    - `EMBEDDING_BINDING_API_KEY` (same value as `AI_EMBEDDING_GATEWAY_API_KEY`)
-   - `EMBEDDING_MODEL` (current project value: `BAAI/bge-m3`)
-   - `EMBEDDING_DIM` (current project value: `1024`)
+   - `EMBEDDING_MODEL` (current project value: `BAAI/bge-small-zh-v1.5`)
+   - `EMBEDDING_DIM` (current project value: `512`)
    - `EMBEDDING_TOKEN_LIMIT`
    - `EMBEDDING_SEND_DIM=false`
    - `EMBEDDING_USE_BASE64=false` (gateway returns float list, not base64 payload)
