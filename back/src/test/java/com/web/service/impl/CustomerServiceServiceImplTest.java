@@ -172,6 +172,14 @@ class CustomerServiceServiceImplTest {
     @Test
     void streamChatNormalizesMessageAndDelegatesToAiGateway() throws Exception {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        CustomerServiceChatResponse gatewayReply = new CustomerServiceChatResponse();
+        gatewayReply.setAnswer("Please check the order detail page first.");
+        gatewayReply.setConfidence(new BigDecimal("0.92"));
+        gatewayReply.setRoute("order");
+        gatewayReply.setSourceType("business");
+
+        when(aiCustomerServiceClient.streamChat(any(CustomerServiceChatRequest.class), any()))
+                .thenReturn(gatewayReply);
 
         String token = "Bearer " + tokenFor(12L, "user@example.com");
 
@@ -183,7 +191,69 @@ class CustomerServiceServiceImplTest {
         assertEquals("Request refund", requestCaptor.getValue().getMessage());
         assertEquals("conversation-3", requestCaptor.getValue().getConversationId());
         assertEquals(token, requestCaptor.getValue().getAuthToken());
-        verifyNoInteractions(knowledgeBaseService);
+        verify(knowledgeBaseService).recordCustomerServiceLog(
+                "Request refund",
+                "conversation-3",
+                "order",
+                "business",
+                null,
+                new BigDecimal("0.92"),
+                null);
+    }
+
+    @Test
+    void streamChatPersistsHitLogsFromFinalReply() throws Exception {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        CustomerServiceChatResponse gatewayReply = new CustomerServiceChatResponse();
+        gatewayReply.setAnswer("Quality issue return shipping is covered by the merchant.");
+        gatewayReply.setConfidence(new BigDecimal("0.94"));
+        gatewayReply.setRoute("after_sales");
+        gatewayReply.setSourceType("knowledge");
+
+        CustomerServiceHitLog hitLog = new CustomerServiceHitLog();
+        hitLog.setDocumentId(5L);
+        hitLog.setChunkId(855L);
+        gatewayReply.setHitLogs(List.of(hitLog));
+
+        when(aiCustomerServiceClient.streamChat(any(CustomerServiceChatRequest.class), any()))
+                .thenReturn(gatewayReply);
+
+        customerServiceService.streamChat("售后质量问题退回运费谁承担？", "conversation-stream-hit", outputStream);
+
+        verify(knowledgeBaseService).recordCustomerServiceLog(
+                "售后质量问题退回运费谁承担？",
+                "conversation-stream-hit",
+                "after_sales",
+                "knowledge",
+                null,
+                new BigDecimal("0.94"),
+                null);
+        verify(knowledgeBaseService).recordHitLogs(
+                "售后质量问题退回运费谁承担？",
+                "conversation-stream-hit",
+                gatewayReply.getHitLogs());
+    }
+
+    @Test
+    void streamChatRecordsMissedQuestionFromFinalReplyFallback() throws Exception {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        CustomerServiceChatResponse gatewayReply = new CustomerServiceChatResponse();
+        gatewayReply.setAnswer("I cannot confirm this from the current knowledge base.");
+        gatewayReply.setConfidence(new BigDecimal("0.50"));
+        gatewayReply.setRoute("knowledge");
+        gatewayReply.setSourceType("knowledge");
+        gatewayReply.setFallbackReason("No matching knowledge was found. The answer uses generic rules only.");
+
+        when(aiCustomerServiceClient.streamChat(any(CustomerServiceChatRequest.class), any()))
+                .thenReturn(gatewayReply);
+
+        customerServiceService.streamChat("余额和优惠券能不能叠加？", "conversation-stream-miss", outputStream);
+
+        verify(knowledgeBaseService).recordMissedQuestion(
+                "余额和优惠券能不能叠加？",
+                "conversation-stream-miss",
+                new BigDecimal("0.50"),
+                "No matching knowledge was found. The answer uses generic rules only.");
     }
 
     private String tokenFor(Long userId, String account) {

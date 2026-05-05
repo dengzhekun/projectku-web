@@ -150,9 +150,39 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-ai-cs-regressi
 
 Behavior:
 
-- The script sends four built-in Chinese questions to backend `/v1/customer-service/chat`.
+- The script sends built-in Chinese regression cases to backend `/v1/customer-service/chat`, including:
+  - `苹果多少钱`（宽词澄清）
+  - `苹果15多少钱`、`苹果15Pro多少钱`（商品型号查询）
+  - `售后质量问题退回运费谁承担`（售后运费）
+  - `优惠券没到门槛为什么不能用`（优惠券门槛）
+  - `物流一直不动怎么办`（物流异常）
+  - 未登录个人查询应提示登录
+  - 伪造 token 访问个人订单应返回 `401`
 - It prints `PASS` or `FAIL` for each case, then prints a final summary.
 - Exit code is `0` only when all cases pass; any failed case returns exit code `1`.
+- Before running cases, it checks the configured LightRAG docs endpoint unless `-SkipLightRagCheck` is passed.
+- If every case fails without an HTTP status code, treat the backend chat endpoint as not reachable first.
 - If product routing still works but one or more knowledge cases fail, treat that as a likely KB coverage or indexing problem first, not automatically an app code regression.
+- If only after-sales / coupon / logistics cases fail and the script says LightRAG is not reachable, start or repair LightRAG before changing prompts or routing code.
+
+Pass criteria:
+
+- Product intent:
+  - `苹果多少钱` must not be treated as a fully concrete iPhone model; answer should ask for clarification or specific model.
+  - `苹果15` / `iPhone 15` variants should route to product query and return product-related answer.
+- Knowledge intent:
+  - after-sales / coupon / logistics cases should return knowledge-based guidance without forcing login.
+- Auth security:
+  - forged token request for personal order/wallet/coupon scope must fail with `401` (or explicit unauthorized/login hint).
 
 Case details are documented in `docs/knowledge-base/ai-cs-regression-cases.md`.
+
+## Stream Chat Observability
+
+Both normal chat and stream chat should now persist the final AI reply metadata:
+
+- `customer_service_log` records route, source type, confidence, fallback reason, and first citation source when available.
+- `kb_hit_log` records chunk-level hits when `final.reply.hitLogs` contains numeric document and chunk ids.
+- `kb_miss_log` records low-confidence or fallback replies.
+
+The stream endpoint still forwards SSE events to the browser. The backend also reads the final SSE event internally so the admin panel can keep hit logs and missed-question drafts aligned with real customer-service usage.

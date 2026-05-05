@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:install": "playwright install chromium"
+    "test:e2e:install": "playwright install chromium",
+    "preflight:smoke": "powershell -ExecutionPolicy Bypass -File ../scripts/preflight-smoke.ps1"
   },
   "dependencies": {
     "axios": "^1.14.0",

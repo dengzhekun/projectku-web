@@ -300,6 +300,18 @@ onMounted(() => {
   cursor: pointer;
 }
 
+.searchBtn:focus-visible,
+.msgBtn:focus-visible,
+.authBtn:focus-visible,
+.sectionMore:focus-visible,
+.actionBtn:focus-visible,
+.panelBtn:focus-visible,
+.cardBtn:focus-visible,
+.cat:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .msgBtn {
   border: 1px solid var(--border);
   border-radius: 999px;

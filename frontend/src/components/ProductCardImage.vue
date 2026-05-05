@@ -16,11 +16,27 @@ type Crop = {
 
 const imageEl = ref<HTMLImageElement | null>(null)
 const bgColor = ref('#f7f7f5')
+const bgMode = ref<'adaptive' | 'fallback'>('fallback')
 const crop = ref<Crop | null>(null)
+const variant = computed(() => props.variant ?? 'card')
+
+const DEFAULT_BG_COLOR = '#f7f7f5'
+const DEFAULT_BG_RGB: [number, number, number] = [247, 247, 245]
+const PURE_WHITE = '#ffffff'
+const PURE_BLACK = '#080808'
+const EDGE_CLUSTER_DISTANCE = 28
+const EDGE_SIMILAR_DISTANCE = 36
+const EDGE_DOMINANCE_MIN = 0.48
+const EDGE_DEVIATION_MAX = 18
+const EDGE_SPREAD_MAX = 120
+const EDGE_SAMPLE_STEPS = 8
+const MAX_ANALYSIS_SIDE = 160
+const ALPHA_IGNORE_THRESHOLD = 20
+const FOREGROUND_DISTANCE_THRESHOLD = 34
 
 const imageStyle = computed(() => {
   const c = crop.value
-  const variant = props.variant ?? 'card'
+  const variantValue = variant.value
   if (!c) {
     return {
       clipPath: 'none',
@@ -31,7 +47,7 @@ const imageStyle = computed(() => {
   }
   const widthPct = c.right - c.left
   const heightPct = c.bottom - c.top
-  const maxScale = variant === 'detail' ? 1.28 : variant === 'thumb' ? 1.15 : 1.35
+  const maxScale = variantValue === 'detail' ? 1.28 : variantValue === 'thumb' ? 1.15 : 1.35
   const scale = Math.min(100 / widthPct, 100 / heightPct, maxScale)
   const translateX = -c.left + (100 / scale - widthPct) / 2
   const translateY = -c.top + (100 / scale - heightPct) / 2
@@ -43,49 +59,42 @@ const imageStyle = computed(() => {
   }
 })
 
-const colorDistance = (a: number[], b: number[]) => {
+const colorDistance = (a: readonly number[], b: readonly number[]) => {
   const dr = a[0] - b[0]
   const dg = a[1] - b[1]
   const db = a[2] - b[2]
   return Math.sqrt(dr * dr + dg * dg + db * db)
 }
 
-const toCssRgb = (rgb: number[]) => `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`
+const toCssRgb = (rgb: readonly number[]) => `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`
 
-const averageColor = (samples: number[][]) => {
-  const total = samples.reduce(
-    (acc, x) => {
-      acc[0] += x[0]
-      acc[1] += x[1]
-      acc[2] += x[2]
-      return acc
-    },
-    [0, 0, 0],
-  )
-  return total.map((x) => Math.round(x / samples.length))
-}
+const colorChroma = (rgb: readonly number[]) => Math.max(...rgb) - Math.min(...rgb)
 
-const colorChroma = (rgb: number[]) => Math.max(...rgb) - Math.min(...rgb)
+const colorLuma = (rgb: readonly number[]) => 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
 
-const colorLuma = (rgb: number[]) => 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
-
-const clampDisplayColor = (rgb: number[]) => {
+const clampDisplayColor = (rgb: readonly number[]) => {
   const luma = colorLuma(rgb)
   const chroma = colorChroma(rgb)
 
-  if (luma >= 244 && chroma <= 22) return '#ffffff'
-  if (luma <= 22 && chroma <= 22) return '#080808'
+  if (luma >= 244 && chroma <= 22) return PURE_WHITE
+  if (luma <= 22 && chroma <= 22) return PURE_BLACK
 
   return toCssRgb(rgb)
 }
 
-const inferEdgeBackground = (samples: number[][]) => {
-  const clusters: { color: number[]; count: number }[] = []
+type Rgb = [number, number, number]
 
+const inferEdgeBackground = (samples: Rgb[]) => {
+  const clusters: { color: Rgb; count: number }[] = []
   samples.forEach((sample) => {
-    const cluster = clusters.find((item) => colorDistance(sample, item.color) <= 28)
+    const cluster = clusters.find((item) => colorDistance(sample, item.color) <= EDGE_CLUSTER_DISTANCE)
     if (cluster) {
-      cluster.color = averageColor([...Array.from({ length: cluster.count }, () => cluster.color), sample])
+      const nextCount = cluster.count + 1
+      cluster.color = [
+        Math.round((cluster.color[0] * cluster.count + sample[0]) / nextCount),
+        Math.round((cluster.color[1] * cluster.count + sample[1]) / nextCount),
+        Math.round((cluster.color[2] * cluster.count + sample[2]) / nextCount),
+      ]
       cluster.count += 1
     } else {
       clusters.push({ color: sample, count: 1 })
@@ -93,10 +102,10 @@ const inferEdgeBackground = (samples: number[][]) => {
   })
 
   const dominant = clusters.sort((a, b) => b.count - a.count)[0]
-  if (!dominant) return { color: [247, 247, 245], reliable: false }
+  if (!dominant) return { color: DEFAULT_BG_RGB, reliable: false }
 
   const dominance = dominant.count / samples.length
-  const similarSamples = samples.filter((sample) => colorDistance(sample, dominant.color) <= 36)
+  const similarSamples = samples.filter((sample) => colorDistance(sample, dominant.color) <= EDGE_SIMILAR_DISTANCE)
   const averageDeviation =
     similarSamples.reduce((sum, sample) => sum + colorDistance(sample, dominant.color), 0) /
     Math.max(1, similarSamples.length)
@@ -104,7 +113,10 @@ const inferEdgeBackground = (samples: number[][]) => {
 
   return {
     color: dominant.color,
-    reliable: dominance >= 0.48 && averageDeviation <= 18 && edgeSpread <= 120,
+    reliable:
+      dominance >= EDGE_DOMINANCE_MIN &&
+      averageDeviation <= EDGE_DEVIATION_MAX &&
+      edgeSpread <= EDGE_SPREAD_MAX,
   }
 }
 
@@ -114,8 +126,7 @@ const analyzeImage = () => {
 
   try {
     const canvas = document.createElement('canvas')
-    const maxSide = 160
-    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight))
+    const scale = Math.min(1, MAX_ANALYSIS_SIDE / Math.max(img.naturalWidth, img.naturalHeight))
     const width = Math.max(1, Math.round(img.naturalWidth * scale))
     const height = Math.max(1, Math.round(img.naturalHeight * scale))
     canvas.width = width
@@ -126,33 +137,32 @@ const analyzeImage = () => {
     ctx.drawImage(img, 0, 0, width, height)
 
     const edgePoints: [number, number][] = []
-    const steps = 8
-    for (let i = 0; i <= steps; i += 1) {
-      const x = Math.round(1 + ((width - 3) * i) / steps)
-      const y = Math.round(1 + ((height - 3) * i) / steps)
+    for (let i = 0; i <= EDGE_SAMPLE_STEPS; i += 1) {
+      const x = Math.round(1 + ((width - 3) * i) / EDGE_SAMPLE_STEPS)
+      const y = Math.round(1 + ((height - 3) * i) / EDGE_SAMPLE_STEPS)
       edgePoints.push([x, 1], [x, height - 2], [1, y], [width - 2, y])
     }
-    const edgeSamples = edgePoints.map(([x, y]) => {
+    const edgeSamples: Rgb[] = edgePoints.map(([x, y]) => {
       const px = ctx.getImageData(Math.max(0, x), Math.max(0, y), 1, 1).data
       return [px[0], px[1], px[2]]
     })
     const edgeBackground = inferEdgeBackground(edgeSamples)
     const background = edgeBackground.color
-    bgColor.value = edgeBackground.reliable ? clampDisplayColor(background) : '#f7f7f5'
+    bgMode.value = edgeBackground.reliable ? 'adaptive' : 'fallback'
+    bgColor.value = edgeBackground.reliable ? clampDisplayColor(background) : DEFAULT_BG_COLOR
 
     const data = ctx.getImageData(0, 0, width, height).data
     let minX = width
     let minY = height
     let maxX = -1
     let maxY = -1
-    const threshold = 34
 
     for (let y = 0; y < height; y += 1) {
       for (let x = 0; x < width; x += 1) {
         const i = (y * width + x) * 4
-        if (data[i + 3] < 20) continue
+        if (data[i + 3] < ALPHA_IGNORE_THRESHOLD) continue
         const distance = colorDistance([data[i], data[i + 1], data[i + 2]], background)
-        if (distance > threshold) {
+        if (distance > FOREGROUND_DISTANCE_THRESHOLD) {
           minX = Math.min(minX, x)
           minY = Math.min(minY, y)
           maxX = Math.max(maxX, x)
@@ -176,8 +186,7 @@ const analyzeImage = () => {
     const cropWidth = maxX - minX + 1
     const cropHeight = maxY - minY + 1
     const areaRatio = (cropWidth * cropHeight) / (width * height)
-    const variant = props.variant ?? 'card'
-    const minUsefulCrop = variant === 'detail' ? 0.42 : 0.28
+    const minUsefulCrop = variant.value === 'detail' ? 0.42 : 0.28
     if (areaRatio > 0.88 || areaRatio < minUsefulCrop) {
       crop.value = null
       return
@@ -190,6 +199,8 @@ const analyzeImage = () => {
       bottom: ((maxY + 1) / height) * 100,
     }
   } catch {
+    bgMode.value = 'fallback'
+    bgColor.value = DEFAULT_BG_COLOR
     crop.value = null
   }
 }
@@ -197,20 +208,21 @@ const analyzeImage = () => {
 watch(
   () => props.src,
   () => {
-    bgColor.value = '#f7f7f5'
+    bgColor.value = DEFAULT_BG_COLOR
+    bgMode.value = 'fallback'
     crop.value = null
   },
 )
 </script>
 
 <template>
-  <div class="productImage" :class="`productImage--${variant ?? 'card'}`">
+  <div class="productImage" :class="`productImage--${variant}`" :data-bg-mode="bgMode">
     <img
       ref="imageEl"
       class="productImageMain"
       :src="src"
       :alt="alt"
-      loading="lazy"
+      :loading="variant === 'detail' ? 'eager' : 'lazy'"
       decoding="async"
       :style="imageStyle"
       @load="analyzeImage"

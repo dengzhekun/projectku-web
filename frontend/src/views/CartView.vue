@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 
 import UiButton from '../components/ui/UiButton.vue'
 import UiEmptyState from '../components/ui/UiEmptyState.vue'
+import ProductCardImage from '../components/ProductCardImage.vue'
 import { useCartStore } from '../stores/cart'
 
 const router = useRouter()
@@ -30,7 +31,7 @@ const dec = (itemId: string, current: number) => {
 
     <div v-else class="list" aria-label="购物车商品">
       <article v-for="it in cart.items" :key="it.itemId" class="item">
-        <img class="cover" :src="it.cover" :alt="it.title" loading="lazy" decoding="async" />
+        <ProductCardImage class="cover" :src="it.cover" :alt="it.title" variant="thumb" />
         <div class="meta">
           <div class="name">{{ it.title }}</div>
           <div class="sub">SKU: {{ it.skuId }}</div>
@@ -78,6 +79,7 @@ const dec = (itemId: string, current: number) => {
 .list {
   display: grid;
   gap: 12px;
+  padding-bottom: 96px;
 }
 
 .item {
@@ -93,8 +95,8 @@ const dec = (itemId: string, current: number) => {
 .cover {
   width: 92px;
   height: 92px;
-  object-fit: cover;
-  background: var(--code-bg);
+  align-self: center;
+  justify-self: center;
 }
 
 .meta {
@@ -161,6 +163,13 @@ const dec = (itemId: string, current: number) => {
   color: var(--text-h);
   cursor: pointer;
   font-size: 16px;
+}
+
+.qtyBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  position: relative;
+  z-index: 1;
 }
 
 .qtyVal {

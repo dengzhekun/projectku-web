@@ -823,6 +823,22 @@ onMounted(() => {
   opacity: 0.6;
 }
 
+.backBtn:focus-visible,
+.crumbLink:focus-visible,
+.thumbBtn:focus-visible,
+.skuBtn:focus-visible,
+.qtyIconBtn:focus-visible,
+.btnAdd:focus-visible,
+.btnBuy:focus-visible,
+.btnFav:focus-visible,
+.reviewsMore:focus-visible,
+.reviewsRetry:focus-visible,
+.tabBtn:focus-visible,
+.myEmptyBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .right {
   display: grid;
   gap: 12px;

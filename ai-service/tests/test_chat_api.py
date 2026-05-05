@@ -14,6 +14,8 @@ def test_classify_customer_service_route_separates_product_and_policy_questions(
     assert chat_api.classify_customer_service_route("注册送多少钱余额？余额不足怎么办？") == "payment_refund"
     assert chat_api.classify_customer_service_route("我的余额是多少？") == "wallet"
     assert chat_api.classify_customer_service_route("我的订单到哪了？") == "order"
+    assert chat_api.classify_customer_service_route("我的物流到哪了？") == "order"
+    assert chat_api.classify_customer_service_route("物流一直不动怎么办？") == "logistics"
     assert chat_api.classify_customer_service_route("加入购物车会锁库存吗？") == "shopping_guide"
     assert chat_api.classify_customer_service_route("NEW300为什么不能用？") == "coupon"
 
@@ -936,6 +938,46 @@ def test_handle_chat_clarifies_memory_when_product_query_matches_multiple_versio
     assert "请告诉我具体内存或规格" in response.answer
     assert response.confidence == 0.72
     assert [item.sourceId for item in response.citations] == ["1", "2"]
+    assert response.hitLogs == []
+
+
+def test_handle_chat_clarifies_memory_when_single_matched_product_has_sku_capacity(monkeypatch):
+    class SingleCapacityProductTool:
+        def search(self, message: str):
+            return [
+                {
+                    "id": 1,
+                    "name": "iPhone 15 Pro 128G",
+                    "price": 7999,
+                    "stock": 98,
+                    "skus": [
+                        {"id": 1, "attrs": {"颜色": "黑色", "容量": "128G"}, "price": 7999, "stock": 48},
+                        {"id": 2, "attrs": {"颜色": "白色", "容量": "128G"}, "price": 7999, "stock": 50},
+                    ],
+                }
+            ]
+
+    class FailingLlmClient:
+        def chat(self, prompt: str):
+            raise AssertionError("Product query without capacity should ask for clarification before direct LLM answer")
+
+    monkeypatch.setattr(
+        chat_api,
+        "get_settings",
+        lambda: SimpleNamespace(ai_cs_max_message_length=800, ai_llm_api_key="test-key"),
+    )
+    monkeypatch.setattr(chat_api, "get_product_tool_client", lambda: SingleCapacityProductTool())
+    monkeypatch.setattr(chat_api, "get_llm_client", lambda: FailingLlmClient())
+
+    response = chat_api.handle_chat(ChatRequest(message="苹果15Pro多少钱？"))
+
+    assert "iPhone 15 Pro 128G" in response.answer
+    assert "不确定你要的是不是这个内存" in response.answer
+    assert "请告诉我具体内存或规格" in response.answer
+    assert response.confidence == 0.72
+    assert response.route == "product"
+    assert response.sourceType == "product"
+    assert [item.sourceId for item in response.citations] == ["1"]
     assert response.hitLogs == []
 
 

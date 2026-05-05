@@ -9,5 +9,5 @@ import java.io.OutputStream;
 public interface AiCustomerServiceClient {
     CustomerServiceChatResponse chat(CustomerServiceChatRequest request);
 
-    void streamChat(CustomerServiceChatRequest request, OutputStream outputStream) throws IOException;
+    CustomerServiceChatResponse streamChat(CustomerServiceChatRequest request, OutputStream outputStream) throws IOException;
 }

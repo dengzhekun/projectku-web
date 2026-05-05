@@ -357,6 +357,13 @@ watch(active, () => {
   font-weight: 800;
 }
 
+.chip:focus-visible,
+.sortBtn:focus-visible,
+.cardBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .content {
   display: grid;
 }

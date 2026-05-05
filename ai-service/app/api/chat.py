@@ -254,6 +254,8 @@ def is_order_state_query(message: str) -> bool:
     lowered = message.lower()
     if "order" in lowered and _contains_any(message, ("我的", "状态", "到哪", "发货", "物流")):
         return True
+    if _contains_any(message, ("我的物流", "物流到哪", "快递到哪", "配送到哪", "包裹到哪")):
+        return True
     return _contains_any(message, ("我的订单", "订单状态", "订单到哪", "订单发货", "发货了吗", "订单号"))
 
 
@@ -335,6 +337,28 @@ def has_specific_sku_hint(message: str) -> bool:
     return bool(re.search(r"\d+\s*(?:g|gb|tb)", message, flags=re.IGNORECASE))
 
 
+def product_has_capacity_hint(product: dict) -> bool:
+    name = str(product.get("name") or "")
+    if has_specific_sku_hint(name):
+        return True
+
+    skus = product.get("skus")
+    if not isinstance(skus, list):
+        return False
+    for sku in skus:
+        if not isinstance(sku, dict):
+            continue
+        attrs = sku.get("attrs")
+        if isinstance(attrs, dict) and any(has_specific_sku_hint(str(value)) for value in attrs.values()):
+            return True
+    return False
+
+
+def has_named_product_variant_hint(message: str) -> bool:
+    lowered = message.lower().replace(" ", "")
+    return any(term in lowered for term in ("pro", "promax", "plus", "max", "ultra"))
+
+
 def is_product_list_query(message: str) -> bool:
     return any(term in message for term in ("有哪些", "有什么", "推荐"))
 
@@ -344,12 +368,11 @@ def is_product_price_or_stock_query(message: str) -> bool:
 
 
 def should_clarify_product_variant(message: str, products: list[dict]) -> bool:
-    return (
-        len(products) > 1
-        and is_product_price_or_stock_query(message)
-        and not is_product_list_query(message)
-        and not has_specific_sku_hint(message)
-    )
+    if not is_product_price_or_stock_query(message) or is_product_list_query(message) or has_specific_sku_hint(message):
+        return False
+    if len(products) > 1:
+        return True
+    return bool(products) and has_named_product_variant_hint(message) and product_has_capacity_hint(products[0])
 
 
 def format_product_price_stock(product: dict) -> str:

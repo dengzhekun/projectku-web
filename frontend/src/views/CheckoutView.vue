@@ -15,6 +15,7 @@ import backCartIconUrl from '../assets/figma/checkout/back-cart.svg'
 import iconAddressUrl from '../assets/figma/checkout/icon-address.svg'
 import iconCouponUrl from '../assets/figma/checkout/icon-coupon.svg'
 import iconInvoiceUrl from '../assets/figma/checkout/icon-invoice.svg'
+import ProductCardImage from '../components/ProductCardImage.vue'
 
 const router = useRouter()
 const cart = useCartStore()
@@ -388,7 +389,7 @@ const submit = async () => {
           <div class="panelHint">{{ cartSummaryText }}</div>
           <div class="items">
             <div v-for="it in cart.items" :key="it.itemId" class="item">
-              <img class="cover" :src="it.cover" :alt="it.title" loading="lazy" decoding="async" />
+              <ProductCardImage class="cover" :src="it.cover" :alt="it.title" variant="thumb" />
               <div class="meta">
                 <div class="name">{{ it.title }}</div>
                 <div class="sub">SKU: {{ it.skuId }}</div>
@@ -465,6 +466,12 @@ const submit = async () => {
 .backIcon {
   width: 20px;
   height: 20px;
+}
+
+.back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 .h1 {
@@ -580,6 +587,12 @@ const submit = async () => {
   color: var(--accent);
 }
 
+.addLink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .addForm {
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -628,6 +641,15 @@ const submit = async () => {
   border: 0;
   background: var(--accent);
   color: #ffffff;
+}
+
+.btnGhost:focus-visible,
+.btnPrimary:focus-visible,
+.payBtn:focus-visible,
+.reviewsRetry:focus-visible,
+.myEmptyBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .shipRow {
@@ -752,9 +774,8 @@ const submit = async () => {
 .cover {
   width: 64px;
   height: 64px;
-  border-radius: 10px;
-  object-fit: cover;
-  background: var(--code-bg);
+  align-self: center;
+  justify-self: center;
 }
 
 .meta {
@@ -765,9 +786,10 @@ const submit = async () => {
 .name {
   font: 500 16px/24px Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   color: var(--text-h);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .sub {
@@ -839,6 +861,12 @@ const submit = async () => {
 .payBtn:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+@media (max-width: 640px) {
+  .name {
+    font: 500 14px/20px Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
 }
 </style>
 

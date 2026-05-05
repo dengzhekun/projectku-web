@@ -226,6 +226,39 @@ Lightweight `k6` smoke scripts live under `k6/` and are only for local or stagin
 k6 run k6/checkout-smoke.js
 ```
 
+### Preflight smoke before publish (Windows)
+
+Use this check before local static publish or GitHub sync to reduce release risk.
+
+Run from repo root:
+
+```powershell
+.\scripts\preflight-smoke.ps1
+```
+
+Common options:
+
+```powershell
+.\scripts\preflight-smoke.ps1 -FrontendUrl http://127.0.0.1:5173 -BackendUrl http://127.0.0.1:8080/api
+.\scripts\preflight-smoke.ps1 -SkipBuild
+```
+
+Or from frontend:
+
+```powershell
+cd frontend
+npm run preflight:smoke
+```
+
+What it checks:
+
+- frontend `npm run build` (unless `-SkipBuild`)
+- storefront page reachability: `/`, `/category`, `/products/:id`
+- product image component marker on detail page
+- backend products API candidate paths: `/v1/products` and `/api/v1/products`
+
+Logs are written to `logs/preflight-smoke-*.log`; failure exits with code `1`.
+
 Recommended production stack:
 
 - Nginx for frontend entry

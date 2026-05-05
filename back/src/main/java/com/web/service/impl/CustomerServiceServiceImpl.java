@@ -46,13 +46,22 @@ public class CustomerServiceServiceImpl implements CustomerServiceService {
         request.setConversationId(conversationId);
         request.setAuthToken(authTokenService.normalizeVerifiedBearerTokenOrNull(authToken));
         CustomerServiceChatResponse response = aiCustomerServiceClient.chat(request);
-        recordCustomerServiceLog(normalizedMessage, conversationId, response);
+        recordObservability(normalizedMessage, conversationId, response);
+        return response;
+    }
+
+    private void recordObservability(String message, String conversationId, CustomerServiceChatResponse response) {
+        recordCustomerServiceLog(message, conversationId, response);
         if (response != null && response.getHitLogs() != null && !response.getHitLogs().isEmpty()) {
-            knowledgeBaseService.recordHitLogs(normalizedMessage, conversationId, response.getHitLogs());
+            try {
+                knowledgeBaseService.recordHitLogs(message, conversationId, response.getHitLogs());
+            } catch (RuntimeException ignored) {
+                // Hit logging is observability only and must not break the customer service reply.
+            }
         } else if (shouldRecordMiss(response)) {
             try {
                 knowledgeBaseService.recordMissedQuestion(
-                        normalizedMessage,
+                        message,
                         conversationId,
                         response.getConfidence(),
                         response.getFallbackReason());
@@ -60,7 +69,6 @@ public class CustomerServiceServiceImpl implements CustomerServiceService {
                 // Miss logging is observability only and must not break the customer service reply.
             }
         }
-        return response;
     }
 
     private void recordCustomerServiceLog(String message, String conversationId, CustomerServiceChatResponse response) {
@@ -100,7 +108,8 @@ public class CustomerServiceServiceImpl implements CustomerServiceService {
         request.setMessage(normalizedMessage);
         request.setConversationId(conversationId);
         request.setAuthToken(authTokenService.normalizeVerifiedBearerTokenOrNull(authToken));
-        aiCustomerServiceClient.streamChat(request, outputStream);
+        CustomerServiceChatResponse response = aiCustomerServiceClient.streamChat(request, outputStream);
+        recordObservability(normalizedMessage, conversationId, response);
     }
 
     private String normalizeMessage(String message) {
