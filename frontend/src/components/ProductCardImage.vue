@@ -50,16 +50,7 @@ const colorDistance = (a: number[], b: number[]) => {
   return Math.sqrt(dr * dr + dg * dg + db * db)
 }
 
-const displaySurfaceColor = (rgb: number[]) => {
-  const [r, g, b] = rgb
-  const avg = (r + g + b) / 3
-  const chroma = Math.max(r, g, b) - Math.min(r, g, b)
-
-  if (avg >= 236 && chroma <= 26) return '#ffffff'
-  if (avg <= 32 && chroma <= 26) return '#080808'
-
-  return '#f7f7f5'
-}
+const toCssRgb = (rgb: number[]) => `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`
 
 const averageColor = (samples: number[][]) => {
   const total = samples.reduce(
@@ -72,6 +63,49 @@ const averageColor = (samples: number[][]) => {
     [0, 0, 0],
   )
   return total.map((x) => Math.round(x / samples.length))
+}
+
+const colorChroma = (rgb: number[]) => Math.max(...rgb) - Math.min(...rgb)
+
+const colorLuma = (rgb: number[]) => 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+
+const clampDisplayColor = (rgb: number[]) => {
+  const luma = colorLuma(rgb)
+  const chroma = colorChroma(rgb)
+
+  if (luma >= 244 && chroma <= 22) return '#ffffff'
+  if (luma <= 22 && chroma <= 22) return '#080808'
+
+  return toCssRgb(rgb)
+}
+
+const inferEdgeBackground = (samples: number[][]) => {
+  const clusters: { color: number[]; count: number }[] = []
+
+  samples.forEach((sample) => {
+    const cluster = clusters.find((item) => colorDistance(sample, item.color) <= 28)
+    if (cluster) {
+      cluster.color = averageColor([...Array.from({ length: cluster.count }, () => cluster.color), sample])
+      cluster.count += 1
+    } else {
+      clusters.push({ color: sample, count: 1 })
+    }
+  })
+
+  const dominant = clusters.sort((a, b) => b.count - a.count)[0]
+  if (!dominant) return { color: [247, 247, 245], reliable: false }
+
+  const dominance = dominant.count / samples.length
+  const similarSamples = samples.filter((sample) => colorDistance(sample, dominant.color) <= 36)
+  const averageDeviation =
+    similarSamples.reduce((sum, sample) => sum + colorDistance(sample, dominant.color), 0) /
+    Math.max(1, similarSamples.length)
+  const edgeSpread = samples.reduce((max, sample) => Math.max(max, colorDistance(sample, dominant.color)), 0)
+
+  return {
+    color: dominant.color,
+    reliable: dominance >= 0.48 && averageDeviation <= 18 && edgeSpread <= 120,
+  }
 }
 
 const analyzeImage = () => {
@@ -91,19 +125,20 @@ const analyzeImage = () => {
     if (!ctx) return
     ctx.drawImage(img, 0, 0, width, height)
 
-    const points = [
-      [1, 1],
-      [width - 2, 1],
-      [1, height - 2],
-      [width - 2, height - 2],
-      [Math.floor(width / 2), 1],
-      [Math.floor(width / 2), height - 2],
-    ].map(([x, y]) => {
+    const edgePoints: [number, number][] = []
+    const steps = 8
+    for (let i = 0; i <= steps; i += 1) {
+      const x = Math.round(1 + ((width - 3) * i) / steps)
+      const y = Math.round(1 + ((height - 3) * i) / steps)
+      edgePoints.push([x, 1], [x, height - 2], [1, y], [width - 2, y])
+    }
+    const edgeSamples = edgePoints.map(([x, y]) => {
       const px = ctx.getImageData(Math.max(0, x), Math.max(0, y), 1, 1).data
       return [px[0], px[1], px[2]]
     })
-    const background = averageColor(points)
-    bgColor.value = displaySurfaceColor(background)
+    const edgeBackground = inferEdgeBackground(edgeSamples)
+    const background = edgeBackground.color
+    bgColor.value = edgeBackground.reliable ? clampDisplayColor(background) : '#f7f7f5'
 
     const data = ctx.getImageData(0, 0, width, height).data
     let minX = width
