@@ -73,6 +73,20 @@ const returnedChunkCount = computed(() => trace.value?.returnedChunkCount ?? 0)
 const selectedChunkCount = computed(() => trace.value?.selectedChunkCount ?? 0)
 const citationCount = computed(() => reply.value?.citations?.length ?? trace.value?.citationCount ?? 0)
 const hitLogCount = computed(() => reply.value?.hitLogs?.length ?? trace.value?.hitLogCount ?? 0)
+const attributionStatus = computed(() => trace.value?.attributionStatus || '-')
+const selectedCategoriesText = computed(() => {
+  const categories = trace.value?.selectedCategories ?? []
+  return categories.length ? categories.join(' / ') : '-'
+})
+const selectedSourceIdsText = computed(() => {
+  const sourceIds = trace.value?.selectedSourceIds ?? []
+  return sourceIds.length ? sourceIds.join(' / ') : '-'
+})
+const answerLevelCitationIdsText = computed(() => {
+  const answerLevelIds = trace.value?.answerLevelCitationIds ?? []
+  return answerLevelIds.length ? answerLevelIds.join(' / ') : '-'
+})
+const citationWithoutHitLogs = computed(() => citationCount.value > 0 && hitLogCount.value === 0)
 
 const missDetected = computed(() => {
   if (!reply.value) return false
@@ -208,6 +222,15 @@ const createDraft = () => {
         <span>引用 {{ citationCount }}</span>
         <span>命中日志 {{ hitLogCount }}</span>
       </div>
+      <div class="trace-detail">
+        <span>归因状态：{{ attributionStatus }}</span>
+        <span>命中分类：{{ selectedCategoriesText }}</span>
+        <span>命中来源ID：{{ selectedSourceIdsText }}</span>
+        <span>答案级引用ID：{{ answerLevelCitationIdsText }}</span>
+      </div>
+      <div v-if="citationWithoutHitLogs" class="trace-note">
+        命中日志为空，但存在引用。当前结果可能来自答案级归因，请结合“归因状态”和引用内容继续核验。
+      </div>
 
       <div v-if="reply.fallbackReason" class="reason">回退原因：{{ reply.fallbackReason }}</div>
       <div v-if="draftHint" class="draft-hint" :class="{ blocked: realtimeResult }">{{ draftHint }}</div>
@@ -334,6 +357,25 @@ const createDraft = () => {
   display: flex;
   flex-wrap: wrap;
   gap: 10px 14px;
+}
+
+.trace-detail {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--font-sm);
+}
+
+.trace-note {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--warning, #c97a00) 26%, var(--border));
+  background: color-mix(in srgb, var(--warning, #c97a00) 10%, var(--bg));
+  color: var(--text);
+  font-size: var(--font-sm);
 }
 
 .reason {

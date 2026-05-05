@@ -74,8 +74,8 @@ function Get-RegressionCases {
             Message = (Decode-Utf8Base64 "6Iu55p6c5aSa5bCR6ZKx");
             AnswerMustContain = @((Decode-Utf8Base64 "6Iu55p6c"));
             AnswerMustContainAny = @((Decode-Utf8Base64 "5rC05p6c6Iu55p6c"), (Decode-Utf8Base64 "6K+N5aSq5a69"));
-            ExpectedRoute = "product";
-            ExpectedSourceType = "product";
+            ExpectedRoute = "clarification";
+            ExpectedSourceType = "clarification";
             AllowNonNullFallbackReason = $true
         },
         @{

@@ -29,6 +29,7 @@ export type CustomerServiceRetrievalTrace = {
   attributionStatus?: string
   selectedCategories?: string[]
   selectedSourceIds?: string[]
+  answerLevelCitationIds?: string[]
   fallbackReason?: string | null
   notes?: string[]
 }

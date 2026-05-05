@@ -41,6 +41,7 @@ class RetrievalTrace(BaseModel):
     attributionStatus: str = "none"
     selectedCategories: list[str] = Field(default_factory=list)
     selectedSourceIds: list[str] = Field(default_factory=list)
+    answerLevelCitationIds: list[str] = Field(default_factory=list)
     fallbackReason: Optional[str] = None
     notes: list[str] = Field(default_factory=list)
 

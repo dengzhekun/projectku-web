@@ -286,6 +286,7 @@ def test_handle_chat_degrades_safely_for_lightrag_answer_level_only_result(monke
     assert response.retrievalTrace.hitLogCount == 0
     assert response.retrievalTrace.citationCount == 1
     assert response.retrievalTrace.selectedSourceIds == ["answer"]
+    assert response.retrievalTrace.answerLevelCitationIds == ["answer"]
     assert response.retrievalTrace.notes == [
         "LightRAG returned answer/source-level evidence without numeric document/chunk metadata; chunk hit logging is degraded."
     ]
@@ -354,6 +355,7 @@ def test_handle_chat_records_chunk_level_retrieval_trace_for_knowledge_hits(monk
     assert response.retrievalTrace.attributionStatus == "chunk_level"
     assert response.retrievalTrace.selectedCategories == ["coupon"]
     assert response.retrievalTrace.selectedSourceIds == ["kb:6:3:12"]
+    assert response.retrievalTrace.answerLevelCitationIds == []
     assert response.retrievalTrace.hitLogCount == 1
     assert response.retrievalTrace.citationCount == 1
     assert response.retrievalTrace.fallbackReason is None

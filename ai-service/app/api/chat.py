@@ -183,6 +183,11 @@ def build_retrieval_trace(
     notes: list[str] = []
     selected_source_ids = _unique_metadata_values(selected_chunks, "source_id")
     selected_categories = _unique_metadata_values(selected_chunks, "category")
+    answer_level_citation_ids = [
+        citation.sourceId
+        for citation in citations
+        if citation.sourceType == "lightrag" and citation.sourceId == "answer"
+    ]
 
     if hit_logs:
         attribution_status = "chunk_level"
@@ -214,6 +219,7 @@ def build_retrieval_trace(
         attributionStatus=attribution_status,
         selectedCategories=selected_categories,
         selectedSourceIds=selected_source_ids,
+        answerLevelCitationIds=answer_level_citation_ids,
         fallbackReason=fallback_reason,
         notes=notes,
     )

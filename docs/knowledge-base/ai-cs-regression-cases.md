@@ -5,12 +5,12 @@
 ## 内置用例
 
 1. `苹果多少钱`
-   - 目标：验证商品类问题仍然走商品路由，且对“苹果”这种过宽词给出稳定澄清。
+   - 目标：验证“苹果”这种过宽词走澄清路由，而不是直接进入商品查询。
    - 通过条件：
      - `answer` 包含 `苹果`
      - `answer` 还需包含 `水果苹果` 或 `词太宽`
-     - `route=product`
-     - `sourceType=product`
+     - `route=clarification`
+     - `sourceType=clarification`
    - 备注：`fallbackReason` 允许为空或非空，不作为失败条件。
 
 2. `苹果15多少钱`
