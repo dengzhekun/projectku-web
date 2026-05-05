@@ -387,6 +387,32 @@ def test_handle_chat_returns_friendly_message_when_knowledge_retrieval_is_unavai
     assert response.fallbackReason == "Knowledge retrieval is temporarily unavailable."
 
 
+def test_handle_chat_returns_friendly_message_when_graph_lookup_fails(monkeypatch):
+    class DummyRetriever:
+        def query(self, text: str, top_k: int = 6):
+            return [{"document": "物流规则", "metadata": {"source_type": "kb", "source_id": "kb:1"}}]
+
+    class FailingNeo4jRetriever:
+        def lookup_product_policy(self, text: str):
+            raise RuntimeError("neo4j temporarily unavailable")
+
+    monkeypatch.setattr(
+        chat_api,
+        "get_settings",
+        lambda: SimpleNamespace(ai_cs_max_message_length=800, ai_llm_api_key="test-key"),
+    )
+    monkeypatch.setattr(chat_api, "is_product_query", lambda _: False)
+    monkeypatch.setattr(chat_api, "get_knowledge_retriever", lambda: DummyRetriever())
+    monkeypatch.setattr(chat_api, "get_neo4j_retriever", lambda: FailingNeo4jRetriever())
+
+    response = chat_api.handle_chat(ChatRequest(message="物流一直不动怎么办？"))
+
+    assert "知识库服务暂时不可用" in response.answer
+    assert response.route == "logistics"
+    assert response.sourceType == "knowledge"
+    assert response.fallbackReason == "Knowledge retrieval is temporarily unavailable."
+
+
 def test_handle_chat_filters_stale_kb_versions_for_same_document(monkeypatch):
     captured = {}
 
@@ -601,6 +627,34 @@ def test_handle_chat_stream_returns_friendly_final_event_when_knowledge_retrieva
     assert reply["sourceType"] == "knowledge"
     assert "知识库服务暂时不可用" in reply["answer"]
     assert "10061" not in reply["answer"]
+    assert reply["fallbackReason"] == "Knowledge retrieval is temporarily unavailable."
+
+
+def test_handle_chat_stream_returns_friendly_final_event_when_graph_lookup_fails(monkeypatch):
+    class DummyRetriever:
+        def query(self, text: str, top_k: int = 6):
+            return [{"document": "物流规则", "metadata": {"source_type": "kb", "source_id": "kb:1"}}]
+
+    class FailingNeo4jRetriever:
+        def lookup_product_policy(self, text: str):
+            raise RuntimeError("neo4j temporarily unavailable")
+
+    monkeypatch.setattr(
+        chat_api,
+        "get_settings",
+        lambda: SimpleNamespace(ai_cs_max_message_length=800, ai_llm_api_key="test-key"),
+    )
+    monkeypatch.setattr(chat_api, "is_product_query", lambda _: False)
+    monkeypatch.setattr(chat_api, "get_knowledge_retriever", lambda: DummyRetriever())
+    monkeypatch.setattr(chat_api, "get_neo4j_retriever", lambda: FailingNeo4jRetriever())
+
+    events = list(chat_api.handle_chat_stream(ChatRequest(message="物流一直不动怎么办？", conversationId="c-graph-down")))
+    final_event = next(event for event in events if event["type"] == "final")
+    reply = final_event["reply"]
+
+    assert reply["route"] == "logistics"
+    assert reply["sourceType"] == "knowledge"
+    assert "知识库服务暂时不可用" in reply["answer"]
     assert reply["fallbackReason"] == "Knowledge retrieval is temporarily unavailable."
 
 

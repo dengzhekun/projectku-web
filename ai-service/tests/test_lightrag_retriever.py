@@ -244,7 +244,7 @@ def test_lightrag_query_falls_back_to_legacy_query_when_query_data_unavailable()
             self.query_calls = []
 
         def query_data(self, text: str, top_k: int = 6, chunk_top_k: int | None = None, enable_rerank: bool | None = None):
-            raise RuntimeError("LightRAG request failed for /query/data: timed out")
+            raise RuntimeError("LightRAG request failed for /query/data: 404 not found")
 
         def query(self, text: str, top_k: int = 6):
             self.query_calls.append((text, top_k))
@@ -273,6 +273,32 @@ def test_lightrag_query_falls_back_to_legacy_query_when_query_data_unavailable()
             },
         }
     ]
+
+
+def test_lightrag_query_does_not_retry_legacy_query_when_query_data_times_out():
+    class DummyClient:
+        def __init__(self):
+            self.query_calls = []
+
+        def query_data(self, text: str, top_k: int = 6, chunk_top_k: int | None = None, enable_rerank: bool | None = None):
+            raise RuntimeError("LightRAG request failed for /query/data: timed out")
+
+        def query(self, text: str, top_k: int = 6):
+            self.query_calls.append((text, top_k))
+            raise AssertionError("timeout should fail fast instead of retrying /query")
+
+    client = DummyClient()
+    retriever = LightRagRetriever(client)
+
+    try:
+        retriever.query("what", top_k=4)
+        raised = None
+    except RuntimeError as exc:
+        raised = exc
+
+    assert raised is not None
+    assert "timed out" in str(raised)
+    assert client.query_calls == []
 
 
 def test_lightrag_query_prefers_decoded_metadata_from_source_content():

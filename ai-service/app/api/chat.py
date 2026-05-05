@@ -673,9 +673,9 @@ def handle_chat(request: ChatRequest) -> ChatResponse:
     try:
         raw_chunks = get_knowledge_retriever().query(message, top_k=requested_top_k)
         chunks = rerank_chunks_for_message(message, raw_chunks, limit=6)
+        graph_rows = get_neo4j_retriever().lookup_product_policy(message)
     except Exception:
         return knowledge_retrieval_unavailable_response(route)
-    graph_rows = get_neo4j_retriever().lookup_product_policy(message)
 
     retrieved_context = merge_context(chunks)
     graph_context = format_graph_context(graph_rows)
@@ -840,12 +840,12 @@ def handle_chat_stream(request: ChatRequest):
     try:
         raw_chunks = get_knowledge_retriever().query(message, top_k=requested_top_k)
         chunks = rerank_chunks_for_message(message, raw_chunks, limit=6)
+        graph_rows = get_neo4j_retriever().lookup_product_policy(message)
     except Exception:
         response = knowledge_retrieval_unavailable_response(route)
         yield {"type": "delta", "text": response.answer}
         yield {"type": "final", "reply": response.model_dump()}
         return
-    graph_rows = get_neo4j_retriever().lookup_product_policy(message)
 
     retrieved_context = merge_context(chunks)
     graph_context = format_graph_context(graph_rows)

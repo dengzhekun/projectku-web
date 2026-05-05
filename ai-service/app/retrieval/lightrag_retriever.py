@@ -19,7 +19,9 @@ class LightRagRetriever:
                 chunks: list[dict[str, Any]] = []
                 result = query_data(text, top_k=top_k, chunk_top_k=top_k, enable_rerank=False)
                 chunks.extend(_extract_chunks_from_result(result))
-            except RuntimeError:
+            except RuntimeError as exc:
+                if not _is_query_data_endpoint_unavailable(exc):
+                    raise
                 result = self.client.query(text, top_k=top_k)
             else:
                 for expanded_query in _build_expanded_queries(text):
@@ -124,6 +126,11 @@ def _extract_chunks_from_result(result: Any) -> list[dict[str, Any]]:
         ]
 
     return []
+
+
+def _is_query_data_endpoint_unavailable(exc: RuntimeError) -> bool:
+    message = str(exc).lower()
+    return any(term in message for term in ("404", "405", "not found", "method not allowed"))
 
 
 def _build_expanded_queries(text: str) -> list[str]:
