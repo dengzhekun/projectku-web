@@ -44,6 +44,14 @@ function Invoke-HttpSmoke([string]$name, [string]$url) {
     return $null
 }
 
+function Resolve-ProductsApiUrl([string]$backendUrl) {
+    $base = $backendUrl.TrimEnd("/")
+    if ($base -match "/api$") {
+        return ($base + "/v1/products")
+    }
+    return ($base + "/api/v1/products")
+}
+
 function Test-ProductImageComponent {
     $viewFile = Join-Path $repoRoot "frontend/src/views/ProductDetailView.vue"
     if (-not (Test-Path -LiteralPath $viewFile)) {
@@ -81,51 +89,31 @@ try {
     $homeResp = Invoke-HttpSmoke -name "Home page" -url $FrontendUrl
     $null = Invoke-HttpSmoke -name "Category page" -url ($FrontendUrl.TrimEnd("/") + "/category")
 
-    Write-Step "Checking backend products API..."
-    $apiCandidates = @(
-        ($BackendUrl.TrimEnd("/") + "/v1/products"),
-        ($BackendUrl.TrimEnd("/") + "/api/v1/products")
-    )
-    $apiOk = $false
-    foreach ($candidate in $apiCandidates) {
-        try {
-            $apiResp = Invoke-WebRequest -Uri $candidate -Method Get -TimeoutSec $TimeoutSec
-            if ($apiResp.StatusCode -ge 200 -and $apiResp.StatusCode -lt 400) {
-                Write-Host ("[OK] Products API reachable: {0}" -f $candidate) -ForegroundColor Green
-                $apiOk = $true
-                break
-            }
-        } catch {
-            Write-Host ("[WARN] API candidate unreachable: {0}" -f $candidate) -ForegroundColor Yellow
-        }
-    }
-    if (-not $apiOk) {
-        Mark-Fail ("Neither API endpoint is reachable: {0}" -f ($apiCandidates -join ", "))
-    }
+    $productsApiUrl = Resolve-ProductsApiUrl -backendUrl $BackendUrl
+    Write-Step ("Checking backend products API... {0}" -f $productsApiUrl)
+    $apiResp = Invoke-HttpSmoke -name "Products API" -url $productsApiUrl
+    $apiOk = $null -ne $apiResp
 
     $productId = $null
     if ($apiOk) {
-        foreach ($candidate in $apiCandidates) {
-            try {
-                $raw = Invoke-RestMethod -Uri $candidate -Method Get -TimeoutSec $TimeoutSec
-                $items = @()
-                if ($raw -is [System.Array]) {
-                    $items = $raw
-                } elseif ($null -ne $raw.data) {
-                    if ($raw.data -is [System.Array]) { $items = $raw.data } else { $items = @($raw.data) }
-                } elseif ($null -ne $raw.items) {
-                    if ($raw.items -is [System.Array]) { $items = $raw.items } else { $items = @($raw.items) }
-                } else {
-                    $items = @($raw)
-                }
-                if ($items.Count -gt 0 -and $null -ne $items[0].id) {
-                    $productId = [string]$items[0].id
-                    Write-Host ("[OK] Using product id from API: {0}" -f $productId) -ForegroundColor Green
-                    break
-                }
-            } catch {
-                Write-Host ("[WARN] Failed to parse product list from {0}: {1}" -f $candidate, $_.Exception.Message) -ForegroundColor Yellow
+        try {
+            $raw = Invoke-RestMethod -Uri $productsApiUrl -Method Get -TimeoutSec $TimeoutSec
+            $items = @()
+            if ($raw -is [System.Array]) {
+                $items = $raw
+            } elseif ($null -ne $raw.data) {
+                if ($raw.data -is [System.Array]) { $items = $raw.data } else { $items = @($raw.data) }
+            } elseif ($null -ne $raw.items) {
+                if ($raw.items -is [System.Array]) { $items = $raw.items } else { $items = @($raw.items) }
+            } else {
+                $items = @($raw)
             }
+            if ($items.Count -gt 0 -and $null -ne $items[0].id) {
+                $productId = [string]$items[0].id
+                Write-Host ("[OK] Using product id from API: {0}" -f $productId) -ForegroundColor Green
+            }
+        } catch {
+            Write-Host ("[WARN] Failed to parse product list from {0}: {1}" -f $productsApiUrl, $_.Exception.Message) -ForegroundColor Yellow
         }
     }
 

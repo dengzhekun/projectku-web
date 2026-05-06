@@ -5,7 +5,8 @@ import type { APIRequestContext, Page } from '@playwright/test'
 import { expect } from '@playwright/test'
 
 export const authFile = 'tests/.auth/user.json'
-export const apiBaseURL = process.env.PLAYWRIGHT_API_BASE_URL ?? 'http://127.0.0.1:8080/api'
+const rawApiBaseURL = process.env.PLAYWRIGHT_API_BASE_URL ?? 'http://127.0.0.1:8080/api'
+export const apiBaseURL = rawApiBaseURL.replace(/\/+$/, '').replace(/\/v1$/, '')
 export const testAccount = process.env.PLAYWRIGHT_ACCOUNT ?? 'user@example.com'
 export const testPassword = process.env.PLAYWRIGHT_PASSWORD ?? '123456'
 

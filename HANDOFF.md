@@ -145,7 +145,7 @@ mvn spring-boot:run
 When taking over this project, verify these items first:
 
 1. You can clone the repo and run the frontend locally.
-2. You can start the backend and access the products API.
+2. You can start the backend and access the products API (`http://127.0.0.1:8080/api/v1/products`).
 3. You know which environment variables are still missing for AI and production.
 4. You know whether you are only maintaining local development, or also production deployment.
 5. You know where the current live domain and server entry points are.

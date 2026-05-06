@@ -255,7 +255,7 @@ What it checks:
 - frontend `npm run build` (unless `-SkipBuild`)
 - storefront page reachability: `/`, `/category`, `/products/:id`
 - product image component marker on detail page
-- backend products API candidate paths: `/v1/products` and `/api/v1/products`
+- backend products API: `/api/v1/products`
 
 Logs are written to `logs/preflight-smoke-*.log`; failure exits with code `1`.
 
